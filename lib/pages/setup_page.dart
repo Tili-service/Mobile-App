@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'login.dart';
+import 'login_page.dart';
 import 'package:http/http.dart' as http; // Le package pour les requêtes
 import 'dart:convert';
-import 'services/token_service.dart';
+import '../services/token_service.dart';
 
 class SetupPage extends StatefulWidget {
   const SetupPage({
