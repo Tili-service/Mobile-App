@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'app.dart';
-import 'setup.dart';
-import './services/token_service.dart';
+import 'app_page.dart';
+import 'setup_page.dart';
+import '../services/token_service.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({
