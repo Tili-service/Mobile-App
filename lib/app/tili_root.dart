@@ -107,9 +107,9 @@ class _TiliRootState extends State<TiliRoot> with FullScreenListener {
                 body: Center(child: CircularProgressIndicator()),
               );
             }
+
             final shopToken = snapshot.data?[0];
             final pinAdminToken = snapshot.data?[1];
-
             if (shopToken == null || pinAdminToken == null) {
               return SetupPage(
                 isFullScreen: isFullScreen,
