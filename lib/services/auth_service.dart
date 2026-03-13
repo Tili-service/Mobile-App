@@ -6,13 +6,13 @@ such as logging in users and managing authentication tokens. It provides a metho
 to send login requests to the backend API and retrieve authentication tokens upon
 successful login. */
 class AuthService {
-  static const String baseUrl = "http://10.0.2.2:8080";
-  static Future<String?> login(String email, String password) async {
     /* The login method takes an email and password as parameters, constructs a
     POST request to the backend API's login endpoint, and sends the credentials
     in JSON format. If the response status code is 200 (indicating a successful login),
     it decodes the response body to extract and return the authentication token.
     If the login fails, it returns null. */
+  static const String baseUrl = "http://10.0.2.2:8080";
+  static Future<String?> login(String email, String password) async {
     final url = Uri.parse('$baseUrl/users/login');
     final response = await http.post(
       url,
