@@ -1,6 +1,6 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-enum TokenType { shop, user, pinAdmin}
+enum TokenType { shop, user, license }
 
 class TokenService {
   static const _storage = FlutterSecureStorage();
@@ -15,7 +15,7 @@ class TokenService {
   interface for managing authentication credentials within the application. */
   static const _shopKey = 'shopToken';
   static const _userKey = 'userToken';
-  static const _pinAdminKey = 'pinAdmin';
+  static const _licenseKey = 'licenseToken';
   static Future<void> saveToken(TokenType tokenType, String token) async {
     switch (tokenType) {
       case TokenType.shop:
@@ -24,8 +24,8 @@ class TokenService {
       case TokenType.user:
         await _storage.write(key: _userKey, value: token);
         break;
-      case TokenType.pinAdmin:
-        await _storage.write(key: _pinAdminKey, value: token);
+      case TokenType.license:
+        await _storage.write(key: _licenseKey, value: token);
         break;
     }
   }
@@ -44,8 +44,8 @@ class TokenService {
         return await _storage.read(key: _shopKey);
       case TokenType.user:
         return await _storage.read(key: _userKey);
-      case TokenType.pinAdmin:
-        return await _storage.read(key: _pinAdminKey);
+      case TokenType.license:
+        return await _storage.read(key: _licenseKey);
     }
   }
 
@@ -65,8 +65,8 @@ class TokenService {
       case TokenType.user:
         await _storage.delete(key: _userKey);
         break;
-      case TokenType.pinAdmin:
-        await _storage.delete(key: _pinAdminKey);
+      case TokenType.license:
+        await _storage.delete(key: _licenseKey);
         break;
     }
   }
