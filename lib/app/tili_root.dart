@@ -72,6 +72,9 @@ class _TiliRootState extends State<TiliRoot> with FullScreenListener {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        fontFamily: 'TiliFont',
+      ),
       home:  FutureBuilder<List<String?>>(
           future: Future.wait([
             TokenService.getToken(TokenType.shop),
