@@ -39,10 +39,8 @@ class _LicensesPageState extends State<LicensesPage> {
   during initialization to ensure that the licenses are loaded as soon as the page is displayed. */
   Future<void> _loadLicenses() async {
     final token = await TokenService.getToken(TokenType.shop);
-    print('Shop Token: $token');
     if (token != null) {
       final fetchedLicenses = await AuthService.getLicenses(token);
-      print('Fetched Licenses: $fetchedLicenses');
       setState(() {
         licenses = fetchedLicenses;
       });
