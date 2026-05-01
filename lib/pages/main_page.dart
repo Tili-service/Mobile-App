@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
-import 'credentials_page.dart';
+import 'session_page.dart';
 import '../services/token_service.dart';
+import '../services/auth_service.dart';
 import 'package:jwt_decoder/jwt_decoder.dart';
+import 'create_catalog_page.dart';
+// import 'settings_pages.dart';
 
 /* This widget represents the main page of the application after the user has
 logged in. It displays a category bar, sorting options, and a list of items with
@@ -11,33 +14,88 @@ class MainPage extends StatefulWidget {
     super.key,
     required this.isFullScreen,
     required this.onToggleFullScreen,
+    required this.license,
   });
 
   final bool isFullScreen;
   final VoidCallback onToggleFullScreen;
+  final Map<String, dynamic> license;
 
   @override
   State<MainPage> createState() => _MainPageState();
 }
 
 class _MainPageState extends State<MainPage> {
-  final List<String> _categories = [
-    'Tous',
-    'Boissons',
-    'Snacks',
-    'Desserts',
-    'Couverts',
-    'Sauces',
-    'Autres'
-  ];
-
   String _selectedCategory = 'Tous';
+  String _userName = 'Utilisateur';
+  String _storeName = 'Commerce';
+  String? _catalogName;
+  int? _currentCatalogId;
+  List<dynamic>? _catalog;
+  bool _isLoadingCatalog = true;
+  List<dynamic>? _categories;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserInfo();
+    _loadCatalog();
+    _loadCategories();
+  }
+
+  Future<void> _loadUserInfo() async {
+    final token = await TokenService.getToken(TokenType.user);
+    if (token != null) {
+      try {
+        final decodedToken = JwtDecoder.decode(token);
+        setState(() {
+          _userName = decodedToken['name'] ?? 'Utilisateur';
+        });
+      } catch (e) {
+        print('Error decoding user token: $e');
+      }
+    }
+    setState(() {
+      _storeName = widget.license['store']?['name'] ?? 'Commerce';
+      _catalogName = widget.license['catalog']?['name'] ?? 'Catalogue';
+      _currentCatalogId = widget.license['catalog']?['id'] as int?;
+    });
+  }
+
+  Future<void> _loadCatalog() async {
+    final token = await TokenService.getToken(TokenType.user);
+    if (token != null) {
+      final catalog = await AuthService.getCatalog(token);
+      setState(() {
+        _catalog = catalog;
+        _isLoadingCatalog = false;
+        if (_catalog != null && _catalog!.isNotEmpty) {
+          _catalogName = _catalog![0]['name'] ?? 'Catalogue';
+        }
+      });
+    } else {
+      setState(() {
+        _isLoadingCatalog = false;
+      });
+    }
+  }
+
+  Future<void> _loadCategories() async {
+    final token = await TokenService.getToken(TokenType.user);
+    if (token != null) {
+      final categories = await AuthService.getCategories(token);
+      setState(() {
+        _categories = categories;
+      });
+    }
+  }
 
   void _logout() {
     TokenService.deleteToken(TokenType.user);
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
-        builder: (context) => CredentialsPage(
+        builder: (context) => SessionPage(
+          license: widget.license,
           isFullScreen: widget.isFullScreen,
           onToggleFullScreen: widget.onToggleFullScreen,
         ),
@@ -89,12 +147,20 @@ class _MainPageState extends State<MainPage> {
           onPressed: _logout,
           icon: const Icon(Icons.logout),
         ),
-        title: const Text('Tili'),
+        title: Text('$_storeName - $_userName'),
         actions: [
           IconButton(
             onPressed: () {
-              // TODO: Implement settings
-              print('Settings pressed');
+            //   Navigator.of(context).push(
+            //     MaterialPageRoute(
+            //       builder: (context) => SettingsPage(
+            //         license: widget.license,
+            //         isFullScreen: widget.isFullScreen,
+            //         onToggleFullScreen: widget.onToggleFullScreen,
+            //         currentCatalogId: _currentCatalogId,
+            //       ),
+            //     ),
+            //   );
             },
             icon: const Icon(Icons.settings),
           ),
@@ -121,42 +187,79 @@ class _MainPageState extends State<MainPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    SizedBox(
-                      height: 60, // Fixed height for the category buttons row
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
-                          children: _categories.map((category) => Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                            child: ElevatedButton(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: category == _selectedCategory
-                                  ? const Color(0xFFE15554)
-                                  : Colors.grey[300],
-                                foregroundColor: category == _selectedCategory
-                                  ? Colors.white
-                                  : Colors.black,
+                    if (_catalog != null && _catalog!.isNotEmpty)
+                      SizedBox(
+                        height: 60, // Fixed height for the category buttons row
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children: (_categories ?? []).map((category) => Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                              child: ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: category['name'] == _selectedCategory
+                                    ? const Color(0xFFE15554)
+                                    : Colors.grey[300],
+                                  foregroundColor: category['name'] == _selectedCategory
+                                    ? Colors.white
+                                    : Colors.black,
+                                ),
+                                onPressed: () {
+                                  setState(() {
+                                    _selectedCategory = category['name'] ?? 'Tous';
+                                  });
+                                  print('Selected ${category['name'] ?? 'Unknown'}');
+                                },
+                                child: Text(category['name'] ?? 'Unknown'),
                               ),
-                              onPressed: () {
-                                setState(() {
-                                  _selectedCategory = category;
-                                });
-                                print('Selected $category');
-                              },
-                              child: Text(category),
-                            ),
-                          )).toList(),
+                            )).toList(),
+                          ),
                         ),
                       ),
-                    ),
                     const SizedBox(height: 16),
                     Expanded(
                       child: Container(
                         // Placeholder for the catalog items list
                         color: Colors.grey[200],
-                        child: const Center(
-                          child: Text('Vos articles apparaîtront ici'),
-                        ),
+                        child: _isLoadingCatalog
+                          ? GestureDetector(
+                              onTap: () {
+                                showDialog(
+                                  context: context,
+                                  builder: (context) => const CreateCatalogDialog(),
+                                );
+                              },
+                              child: const Center(
+                                child: Text(
+                                  'Créer un catalogue',
+                                  style: TextStyle(
+                                    color: Colors.blue,
+                                    fontSize: 16,
+                                    decoration: TextDecoration.underline,
+                                  ),
+                                ),
+                              ),
+                            )
+                          : _catalog != null && _catalog!.isNotEmpty
+                            ? Center(child: Text(_catalogName ?? 'Catalogue chargé'))
+                            : GestureDetector(
+                                onTap: () {
+                                  showDialog(
+                                    context: context,
+                                    builder: (context) => const CreateCatalogDialog(),
+                                  );
+                                },
+                                child: const Center(
+                                  child: Text(
+                                    'Pas de catalogue',
+                                    style: TextStyle(
+                                      color: Colors.blue,
+                                      fontSize: 16,
+                                      decoration: TextDecoration.underline,
+                                    ),
+                                  ),
+                                ),
+                              ),
                       ),
                     ),
                   ],
@@ -186,12 +289,6 @@ class _MainPageState extends State<MainPage> {
                       margin: const EdgeInsets.only(top: 16, bottom: 16),
                       child: Align(
                         alignment: Alignment.topCenter,
-                        child: Text(
-                          'Votre commande',
-                          style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
                       ),
                     ),
                   ),
@@ -207,48 +304,50 @@ class _MainPageState extends State<MainPage> {
                             color: Colors.white,
                             padding: const EdgeInsets.all(8.0),
                             margin: const EdgeInsets.only(right: 16, top: 16),
-                            child: Column(
-                              children: [
-                                Row(
-                                  children: [
-                                    _calcButton('1'),
-                                    const SizedBox(width: 4),
-                                    _calcButton('2'),
-                                    const SizedBox(width: 4),
-                                    _calcButton('3'),
-                                  ],
-                                ),
-                                const SizedBox(height: 12),
-                                Row(
-                                  children: [
-                                    _calcButton('4'),
-                                    const SizedBox(width: 4),
-                                    _calcButton('5'),
-                                    const SizedBox(width: 4),
-                                    _calcButton('6'),
-                                  ],
-                                ),
-                                const SizedBox(height: 12),
-                                Row(
-                                  children: [
-                                    _calcButton('7'),
-                                    const SizedBox(width: 4),
-                                    _calcButton('8'),
-                                    const SizedBox(width: 4),
-                                    _calcButton('9'),
-                                  ],
-                                ),
-                                const SizedBox(height: 12),
-                                Row(
-                                  children: [
-                                    _calcButton('X'),
-                                    const SizedBox(width: 4),
-                                    _calcButton('0'),
-                                    const SizedBox(width: 4),
-                                    _calcButton('='),
-                                  ],
-                                ),
-                              ],
+                            child: SingleChildScrollView(
+                              child: Column(
+                                children: [
+                                  Row(
+                                    children: [
+                                      _calcButton('1'),
+                                      const SizedBox(width: 4),
+                                      _calcButton('2'),
+                                      const SizedBox(width: 4),
+                                      _calcButton('3'),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Row(
+                                    children: [
+                                      _calcButton('4'),
+                                      const SizedBox(width: 4),
+                                      _calcButton('5'),
+                                      const SizedBox(width: 4),
+                                      _calcButton('6'),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Row(
+                                    children: [
+                                      _calcButton('7'),
+                                      const SizedBox(width: 4),
+                                      _calcButton('8'),
+                                      const SizedBox(width: 4),
+                                      _calcButton('9'),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Row(
+                                    children: [
+                                      _calcButton('X'),
+                                      const SizedBox(width: 4),
+                                      _calcButton('0'),
+                                      const SizedBox(width: 4),
+                                      _calcButton('='),
+                                    ],
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
                         ),
