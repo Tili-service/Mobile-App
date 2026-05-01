@@ -223,11 +223,14 @@ class _MainPageState extends State<MainPage> {
                         color: Colors.grey[200],
                         child: _isLoadingCatalog
                           ? GestureDetector(
-                              onTap: () {
-                                showDialog(
+                              onTap: () async {
+                                final result = await showDialog(
                                   context: context,
                                   builder: (context) => const CreateCatalogDialog(),
                                 );
+                                if (result == true) {
+                                  _loadCatalog();
+                                }
                               },
                               child: const Center(
                                 child: Text(
@@ -243,11 +246,14 @@ class _MainPageState extends State<MainPage> {
                           : _catalog != null && _catalog!.isNotEmpty
                             ? Center(child: Text(_catalogName ?? 'Catalogue chargé'))
                             : GestureDetector(
-                                onTap: () {
-                                  showDialog(
+                                onTap: () async {
+                                  final result = await showDialog(
                                     context: context,
                                     builder: (context) => const CreateCatalogDialog(),
                                   );
+                                  if (result == true) {
+                                    _loadCatalog();
+                                  }
                                 },
                                 child: const Center(
                                   child: Text(
