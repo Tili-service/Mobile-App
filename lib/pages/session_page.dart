@@ -62,11 +62,16 @@ class _SessionPageState extends State<SessionPage> {
       if (token != null && storeId != null) {
         final result = await AuthService.getPin(token, pinController.text, storeId);
         if (result != null) {
+          // Save the user token
+          if (result['token'] != null) {
+            await TokenService.saveToken(TokenType.user, result['token']);
+          }
           Navigator.of(context).pushReplacement(
             MaterialPageRoute(
               builder: (_) => MainPage(
                 isFullScreen: widget.isFullScreen,
                 onToggleFullScreen: widget.onToggleFullScreen,
+                license: widget.license,
               ),
             ),
           );
