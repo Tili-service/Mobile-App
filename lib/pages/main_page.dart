@@ -4,7 +4,7 @@ import '../services/token_service.dart';
 import '../services/auth_service.dart';
 import 'package:jwt_decoder/jwt_decoder.dart';
 import 'create_catalog_page.dart';
-// import 'settings_pages.dart';
+import 'settings_pages.dart';
 
 /* This widget represents the main page of the application after the user has
 logged in. It displays a category bar, sorting options, and a list of items with
@@ -151,16 +151,16 @@ class _MainPageState extends State<MainPage> {
         actions: [
           IconButton(
             onPressed: () {
-            //   Navigator.of(context).push(
-            //     MaterialPageRoute(
-            //       builder: (context) => SettingsPage(
-            //         license: widget.license,
-            //         isFullScreen: widget.isFullScreen,
-            //         onToggleFullScreen: widget.onToggleFullScreen,
-            //         currentCatalogId: _currentCatalogId,
-            //       ),
-            //     ),
-            //   );
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => SettingsPage(
+                    license: widget.license,
+                    isFullScreen: widget.isFullScreen,
+                    onToggleFullScreen: widget.onToggleFullScreen,
+                    currentCatalogId: _currentCatalogId,
+                  ),
+                ),
+              );
             },
             icon: const Icon(Icons.settings),
           ),
