@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
@@ -12,10 +14,9 @@ class AuthService {
   in JSON format. If the response status code is 200 (indicating a successful login),
   it decodes the response body to extract and return the authentication token.
   If the login fails, it returns null. */
-  static String get baseUrl => dotenv.env['BACKEND_URL'] ?? "http://10.0.2.2:8000";
+  static String get baseUrl => dotenv.env['BACKEND_URL'] ?? (Platform.isAndroid ? "http://10.0.2.2:8000" : "http://127.0.0.1:8000");
   static Future<String?> login(String email, String password) async {
     final url = Uri.parse('$baseUrl/account/login');
-    print("Sending email: $email and password: $password to $url");
     final response = await http.post(
       url,
       headers: {
@@ -186,34 +187,11 @@ class AuthService {
     return response.statusCode == 201;
   }
 
-  /* The getSessions method takes an authentication token, constructs
-  a GET request to the backend API's sessions endpoint, and includes the token in the
-  Authorization header. If the response status code is 200 (indicating a successful request),
-  it decodes the response body to extract and return the list of sessions. If the
-  request fails, it returns null. This method allows the application to retrieve the
-  list of sessions for the store. */
-  static Future<List<dynamic>?> getSessions(String token) async {
-    final url = Uri.parse('$baseUrl/sessions');
-    final response = await http.get(
-      url,
-      headers: {
-        "Authorization": "Bearer $token",
-        "Accept": "application/json",
-      },
-    );
-
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      return data as List<dynamic>;
-    }
-    return null;
-  }
-
-  /* The createSession method takes an authentication token, name, and description, constructs
+  /* The createSession method takes an authentication token, name, and level, constructs
   a POST request to the backend API's session create endpoint, and includes the token
   in the Authorization header. It returns true if the creation is successful (status 201). */
-  static Future<bool> createSession(String token, String name, String description) async {
-    final url = Uri.parse('$baseUrl/session');
+  static Future<bool> createSession(String token, String name, int level) async {
+    final url = Uri.parse('$baseUrl/profile');
     final response = await http.post(
       url,
       headers: {
@@ -222,8 +200,51 @@ class AuthService {
         "Accept": "application/json",
       },
       body: jsonEncode({
-        'name': name,
-        'description': description,
+        'level_access': level,
+        'name': name
+      }),
+    );
+    return response.statusCode == 201;
+  }
+
+  /* The getSessions method takes an authentication token and store ID, constructs
+  a GET request to the backend API's profiles by store endpoint, and includes the token in the
+  Authorization header. If the response status code is 200 (indicating a successful request),
+  it decodes the response body to extract and return the list of profiles (sessions). If the
+  request fails, it returns null. This method allows the application to retrieve the
+  list of profiles for the store. */
+  static Future<List<dynamic>?> getSessions(String token, int storeId) async {
+    final url = Uri.parse('$baseUrl/profile/allProfilesByStoreId/$storeId');
+    final response = await http.get(
+      url,
+      headers: {
+        "Authorization": "Bearer $token",
+        "Accept": "application/json",
+      },
+    ).timeout(const Duration(seconds: 10));
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return data as List<dynamic>;
+    }
+    return null;
+  }
+
+  /* The createCategory method takes an authentication token, catalog ID, and type, constructs
+  a POST request to the backend API's categorie create endpoint, and includes the token
+  in the Authorization header. It returns true if the creation is successful (status 201). */
+  static Future<bool> createCategory(String token, int catalogId, String type) async {
+    final url = Uri.parse('$baseUrl/categorie');
+    final response = await http.post(
+      url,
+      headers: {
+        "Authorization": "Bearer $token",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+      },
+      body: jsonEncode({
+        'categorie_id': catalogId,
+        'type': type,
       }),
     );
     return response.statusCode == 201;
