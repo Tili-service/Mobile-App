@@ -87,4 +87,145 @@ class AuthService {
     }
     return null;
   }
+
+  /* The getCatalog method takes an authentication token as a parameter, constructs
+  a GET request to the backend API's catalog endpoint, and includes the token in the
+  Authorization header. If the response status code is 200 (indicating a successful request),
+  it decodes the response body to extract and return the catalog data. If the
+  request fails, it returns null. This method allows the application to retrieve the
+  catalog for the current session. */
+  static Future<List<dynamic>?> getCatalog(String token) async {
+    final url = Uri.parse('$baseUrl/catalog');
+    final response = await http.get(
+      url,
+      headers: {
+        "Authorization": "Bearer $token",
+        "Accept": "application/json",
+      },
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return data as List<dynamic>;
+    }
+    return null;
+  }
+
+  /* The getCategories method takes an authentication token as a parameter, constructs
+  a GET request to the backend API's categories endpoint, and includes the token in the
+  Authorization header. If the response status code is 200 (indicating a successful request),
+  it decodes the response body to extract and return the list of categories. If the
+  request fails, it returns null. This method allows the application to retrieve the
+  categories for the current session. */
+  static Future<List<dynamic>?> getCategories(String token) async {
+    final url = Uri.parse('$baseUrl/categorie');
+    final response = await http.get(
+      url,
+      headers: {
+        "Authorization": "Bearer $token",
+        "Accept": "application/json",
+      },
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return data as List<dynamic>;
+    }
+    return null;
+  }
+
+  /* The updateCatalog method takes an authentication token, a catalog ID, and data to update,
+  constructs a PUT request to the backend API's catalog update endpoint, and includes the token
+  in the Authorization header. It returns true if the update is successful (status 200). */
+  static Future<bool> updateCatalog(String token, int catalogId, Map<String, dynamic> data) async {
+    final url = Uri.parse('$baseUrl/catalog/$catalogId');
+    final response = await http.put(
+      url,
+      headers: {
+        "Authorization": "Bearer $token",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+      },
+      body: jsonEncode(data),
+    );
+    return response.statusCode == 200;
+  }
+
+  /* The deleteCatalog method takes an authentication token and a catalog ID, constructs
+  a DELETE request to the backend API's catalog delete endpoint, and includes the token
+  in the Authorization header. It returns true if the deletion is successful (status 200). */
+  static Future<bool> deleteCatalog(String token, int catalogId) async {
+    final url = Uri.parse('$baseUrl/catalog/$catalogId');
+    final response = await http.delete(
+      url,
+      headers: {
+        "Authorization": "Bearer $token",
+        "Accept": "application/json",
+      },
+    );
+    return response.statusCode == 200;
+  }
+
+  /* The createCatalog method takes an authentication token, name, and description, constructs
+  a POST request to the backend API's catalog create endpoint, and includes the token
+  in the Authorization header. It returns true if the creation is successful (status 201). */
+  static Future<bool> createCatalog(String token, String name, String description) async {
+    final url = Uri.parse('$baseUrl/catalog');
+    final response = await http.post(
+      url,
+      headers: {
+        "Authorization": "Bearer $token",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+      },
+      body: jsonEncode({
+        'name': name,
+        'description': description,
+      }),
+    );
+    return response.statusCode == 201;
+  }
+
+  /* The getSessions method takes an authentication token, constructs
+  a GET request to the backend API's sessions endpoint, and includes the token in the
+  Authorization header. If the response status code is 200 (indicating a successful request),
+  it decodes the response body to extract and return the list of sessions. If the
+  request fails, it returns null. This method allows the application to retrieve the
+  list of sessions for the store. */
+  static Future<List<dynamic>?> getSessions(String token) async {
+    final url = Uri.parse('$baseUrl/sessions');
+    final response = await http.get(
+      url,
+      headers: {
+        "Authorization": "Bearer $token",
+        "Accept": "application/json",
+      },
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return data as List<dynamic>;
+    }
+    return null;
+  }
+
+  /* The createSession method takes an authentication token, name, and description, constructs
+  a POST request to the backend API's session create endpoint, and includes the token
+  in the Authorization header. It returns true if the creation is successful (status 201). */
+  static Future<bool> createSession(String token, String name, String description) async {
+    final url = Uri.parse('$baseUrl/session');
+    final response = await http.post(
+      url,
+      headers: {
+        "Authorization": "Bearer $token",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+      },
+      body: jsonEncode({
+        'name': name,
+        'description': description,
+      }),
+    );
+    return response.statusCode == 201;
+  }
 }
