@@ -8,10 +8,17 @@ by sending a POST request to the API with the necessary information such
 as the license ID, store name, SIRET number, and TVA number. The class also
 retrieves the base URL for the API from environment variables. */
 class MainPageService {
-  static String get baseUrl => dotenv.env['BACKEND_URL'] ?? "http://10.0.2.2:8000";
-  static Future<List?> getProfileName(String token) async {
+  static String get baseUrl {
+    try {
+      final env = dotenv.env['BACKEND_URL'];
+      if (env != null && env.isNotEmpty) return env;
+    } catch (_) {}
+    return "http://10.0.2.2:8000";
+  }
+  static Future<List?> getProfileName(String token, {http.Client? client}) async {
+    client ??= http.Client();
     final url = Uri.parse('$baseUrl/profile/me');
-    final response = await http.get(
+    final response = await client.get(
       url,
       headers: {
         "Authorization": "Bearer $token",
