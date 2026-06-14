@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'session_page.dart';
 import '../services/token_service.dart';
 import '../services/auth_service.dart';
 import 'package:jwt_decoder/jwt_decoder.dart';
 import 'create_catalog_page.dart';
-// import 'settings_pages.dart';
+import 'settings_pages.dart';
 
 /* This widget represents the main page of the application after the user has
 logged in. It displays a category bar, sorting options, and a list of items with
@@ -90,6 +91,41 @@ class _MainPageState extends State<MainPage> {
     }
   }
 
+  void _showSnackBar(String message) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<String?> _showSettingsPinDialog() async {
+    return showDialog<String>(
+      context: context,
+      builder: (context) => const _SettingsPinDialog(),
+    );
+  }
+
+  Future<void> _openSettings() async {
+    final pin = await _showSettingsPinDialog();
+    if (pin == null) {
+      return;
+    }
+    if (pin.length != 6) {
+      _showSnackBar('Le PIN doit contenir 6 chiffres');
+      return;
+    }
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => SettingsPage(
+          license: widget.license,
+          isFullScreen: widget.isFullScreen,
+          onToggleFullScreen: widget.onToggleFullScreen,
+          currentCatalogId: _currentCatalogId,
+        ),
+      ),
+    );
+  }
+
   void _logout() {
     TokenService.deleteToken(TokenType.user);
     Navigator.of(context).pushReplacement(
@@ -112,7 +148,9 @@ class _MainPageState extends State<MainPage> {
           aspectRatio: 1,
           child: ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: isDigit ? const Color(0xFF3BB273) : const Color(0xFFE1BC29),
+              backgroundColor: isDigit
+                  ? const Color(0xFF3BB273)
+                  : const Color(0xFFE1BC29),
               foregroundColor: Colors.black,
             ),
             onPressed: () {
@@ -120,10 +158,7 @@ class _MainPageState extends State<MainPage> {
             },
             child: Text(
               label,
-              style: const TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-              ),
+              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
             ),
           ),
         ),
@@ -138,35 +173,26 @@ class _MainPageState extends State<MainPage> {
     final totalSpacing = spacing * 2; // two spacings
     final availableWidth = screenWidth - totalSpacing;
     final partWidth = availableWidth / 4;
-    final safeHeight = MediaQuery.of(context).size.height - MediaQuery.of(context).padding.top - MediaQuery.of(context).padding.bottom - kToolbarHeight;
+    final safeHeight =
+        MediaQuery.of(context).size.height -
+        MediaQuery.of(context).padding.top -
+        MediaQuery.of(context).padding.bottom -
+        kToolbarHeight;
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
         automaticallyImplyLeading: false,
-        leading: IconButton(
-          onPressed: _logout,
-          icon: const Icon(Icons.logout),
-        ),
+        leading: IconButton(onPressed: _logout, icon: const Icon(Icons.logout)),
         title: Text('$_storeName - $_userName'),
         actions: [
           IconButton(
-            onPressed: () {
-            //   Navigator.of(context).push(
-            //     MaterialPageRoute(
-            //       builder: (context) => SettingsPage(
-            //         license: widget.license,
-            //         isFullScreen: widget.isFullScreen,
-            //         onToggleFullScreen: widget.onToggleFullScreen,
-            //         currentCatalogId: _currentCatalogId,
-            //       ),
-            //     ),
-            //   );
-            },
+            onPressed: _openSettings,
             icon: const Icon(Icons.settings),
           ),
         ],
       ),
       body: SafeArea(
+
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -193,26 +219,41 @@ class _MainPageState extends State<MainPage> {
                         child: SingleChildScrollView(
                           scrollDirection: Axis.horizontal,
                           child: Row(
-                            children: (_categories ?? []).map((category) => Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                              child: ElevatedButton(
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: category['name'] == _selectedCategory
-                                    ? const Color(0xFFE15554)
-                                    : Colors.grey[300],
-                                  foregroundColor: category['name'] == _selectedCategory
-                                    ? Colors.white
-                                    : Colors.black,
-                                ),
-                                onPressed: () {
-                                  setState(() {
-                                    _selectedCategory = category['name'] ?? 'Tous';
-                                  });
-                                  print('Selected ${category['name'] ?? 'Unknown'}');
-                                },
-                                child: Text(category['name'] ?? 'Unknown'),
-                              ),
-                            )).toList(),
+                            children: (_categories ?? [])
+                                .map(
+                                  (category) => Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 4.0,
+                                    ),
+                                    child: ElevatedButton(
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor:
+                                            category['name'] ==
+                                                _selectedCategory
+                                            ? const Color(0xFFE15554)
+                                            : Colors.grey[300],
+                                        foregroundColor:
+                                            category['name'] ==
+                                                _selectedCategory
+                                            ? Colors.white
+                                            : Colors.black,
+                                      ),
+                                      onPressed: () {
+                                        setState(() {
+                                          _selectedCategory =
+                                              category['name'] ?? 'Tous';
+                                        });
+                                        print(
+                                          'Selected ${category['name'] ?? 'Unknown'}',
+                                        );
+                                      },
+                                      child: Text(
+                                        category['name'] ?? 'Unknown',
+                                      ),
+                                    ),
+                                  ),
+                                )
+                                .toList(),
                           ),
                         ),
                       ),
@@ -222,34 +263,38 @@ class _MainPageState extends State<MainPage> {
                         // Placeholder for the catalog items list
                         color: Colors.grey[200],
                         child: _isLoadingCatalog
-                          ? GestureDetector(
-                              onTap: () async {
-                                final result = await showDialog(
-                                  context: context,
-                                  builder: (context) => const CreateCatalogDialog(),
-                                );
-                                if (result == true) {
-                                  _loadCatalog();
-                                }
-                              },
-                              child: const Center(
-                                child: Text(
-                                  'Créer un catalogue',
-                                  style: TextStyle(
-                                    color: Colors.blue,
-                                    fontSize: 16,
-                                    decoration: TextDecoration.underline,
+                            ? GestureDetector(
+                                onTap: () async {
+                                  final result = await showDialog(
+                                    context: context,
+                                    builder: (context) =>
+                                        const CreateCatalogDialog(),
+                                  );
+                                  if (result == true) {
+                                    _loadCatalog();
+                                  }
+                                },
+                                child: const Center(
+                                  child: Text(
+                                    'Créer un catalogue',
+                                    style: TextStyle(
+                                      color: Colors.blue,
+                                      fontSize: 16,
+                                      decoration: TextDecoration.underline,
+                                    ),
                                   ),
                                 ),
-                              ),
-                            )
-                          : _catalog != null && _catalog!.isNotEmpty
-                            ? Center(child: Text(_catalogName ?? 'Catalogue chargé'))
+                              )
+                            : _catalog != null && _catalog!.isNotEmpty
+                            ? Center(
+                                child: Text(_catalogName ?? 'Catalogue chargé'),
+                              )
                             : GestureDetector(
                                 onTap: () async {
                                   final result = await showDialog(
                                     context: context,
-                                    builder: (context) => const CreateCatalogDialog(),
+                                    builder: (context) =>
+                                        const CreateCatalogDialog(),
                                   );
                                   if (result == true) {
                                     _loadCatalog();
@@ -293,9 +338,7 @@ class _MainPageState extends State<MainPage> {
                       ),
                       padding: const EdgeInsets.all(8.0),
                       margin: const EdgeInsets.only(top: 16, bottom: 16),
-                      child: Align(
-                        alignment: Alignment.topCenter,
-                      ),
+                      child: Align(alignment: Alignment.topCenter),
                     ),
                   ),
                   Container(
@@ -304,102 +347,105 @@ class _MainPageState extends State<MainPage> {
                       width: partWidth - spacing / 2,
                       height: safeHeight,
                       child: Column(
-                      children: [
-                        Expanded(
-                          child: Container(
-                            color: Colors.white,
-                            padding: const EdgeInsets.all(8.0),
-                            margin: const EdgeInsets.only(right: 16, top: 16),
-                            child: SingleChildScrollView(
+                        children: [
+                          Expanded(
+                            child: Container(
+                              color: Colors.white,
+                              padding: const EdgeInsets.all(8.0),
+                              margin: const EdgeInsets.only(right: 16, top: 16),
+                              child: SingleChildScrollView(
+                                child: Column(
+                                  children: [
+                                    Row(
+                                      children: [
+                                        _calcButton('1'),
+                                        const SizedBox(width: 4),
+                                        _calcButton('2'),
+                                        const SizedBox(width: 4),
+                                        _calcButton('3'),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 12),
+                                    Row(
+                                      children: [
+                                        _calcButton('4'),
+                                        const SizedBox(width: 4),
+                                        _calcButton('5'),
+                                        const SizedBox(width: 4),
+                                        _calcButton('6'),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 12),
+                                    Row(
+                                      children: [
+                                        _calcButton('7'),
+                                        const SizedBox(width: 4),
+                                        _calcButton('8'),
+                                        const SizedBox(width: 4),
+                                        _calcButton('9'),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 12),
+                                    Row(
+                                      children: [
+                                        _calcButton('X'),
+                                        const SizedBox(width: 4),
+                                        _calcButton('0'),
+                                        const SizedBox(width: 4),
+                                        _calcButton('='),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                          SizedBox(height: spacing),
+                          Expanded(
+                            child: Container(
+                              width: partWidth - spacing / 2,
+                              padding: const EdgeInsets.all(16),
+                              margin: const EdgeInsets.only(
+                                right: 16,
+                                bottom: 16,
+                              ),
+                              color: Colors.white,
                               child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  Row(
-                                    children: [
-                                      _calcButton('1'),
-                                      const SizedBox(width: 4),
-                                      _calcButton('2'),
-                                      const SizedBox(width: 4),
-                                      _calcButton('3'),
-                                    ],
+                                  SizedBox(
+                                    width: double.infinity,
+                                    height: 100,
+                                    child: ElevatedButton(
+                                      onPressed: () {},
+                                      child: const Text('Carte'),
+                                    ),
                                   ),
-                                  const SizedBox(height: 12),
-                                  Row(
-                                    children: [
-                                      _calcButton('4'),
-                                      const SizedBox(width: 4),
-                                      _calcButton('5'),
-                                      const SizedBox(width: 4),
-                                      _calcButton('6'),
-                                    ],
+                                  const SizedBox(height: 16),
+                                  SizedBox(
+                                    width: double.infinity,
+                                    height: 100,
+                                    child: ElevatedButton(
+                                      onPressed: () {},
+                                      child: const Text('Espèces'),
+                                    ),
                                   ),
-                                  const SizedBox(height: 12),
-                                  Row(
-                                    children: [
-                                      _calcButton('7'),
-                                      const SizedBox(width: 4),
-                                      _calcButton('8'),
-                                      const SizedBox(width: 4),
-                                      _calcButton('9'),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 12),
-                                  Row(
-                                    children: [
-                                      _calcButton('X'),
-                                      const SizedBox(width: 4),
-                                      _calcButton('0'),
-                                      const SizedBox(width: 4),
-                                      _calcButton('='),
-                                    ],
+                                  const SizedBox(height: 16),
+                                  SizedBox(
+                                    width: double.infinity,
+                                    height: 100,
+                                    child: ElevatedButton(
+                                      onPressed: () {},
+                                      child: const Text('Paiement multiple'),
+                                    ),
                                   ),
                                 ],
                               ),
                             ),
                           ),
-                        ),
-                        SizedBox(height: spacing),
-                        Expanded(
-                          child: Container(
-                            width: partWidth - spacing / 2,
-                            padding: const EdgeInsets.all(16),
-                            margin: const EdgeInsets.only(right: 16, bottom: 16),
-                            color: Colors.white,
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                SizedBox(
-                                  width: double.infinity,
-                                  height: 100,
-                                  child: ElevatedButton(
-                                    onPressed: () {},
-                                    child: const Text('Carte'),
-                                  ),
-                                ),
-                                const SizedBox(height: 16),
-                                SizedBox(
-                                  width: double.infinity,
-                                  height: 100,
-                                  child: ElevatedButton(
-                                    onPressed: () {},
-                                    child: const Text('Espèces'),
-                                  ),
-                                ),
-                                const SizedBox(height: 16),
-                                SizedBox(
-                                  width: double.infinity,
-                                  height: 100,
-                                  child: ElevatedButton(
-                                    onPressed: () {},
-                                    child: const Text('Paiement multiple'),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
                   ),
                 ],
               ),
@@ -407,6 +453,60 @@ class _MainPageState extends State<MainPage> {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _SettingsPinDialog extends StatefulWidget {
+  const _SettingsPinDialog();
+
+  @override
+  State<_SettingsPinDialog> createState() => _SettingsPinDialogState();
+}
+
+class _SettingsPinDialogState extends State<_SettingsPinDialog> {
+  final TextEditingController _pinController = TextEditingController();
+
+  @override
+  void dispose() {
+    _pinController.dispose();
+    super.dispose();
+  }
+
+  void _submitPin() {
+    Navigator.of(context).pop(_pinController.text);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('PIN administrateur'),
+      content: SizedBox(
+        width: 280,
+        child: TextField(
+          controller: _pinController,
+          autofocus: true,
+          keyboardType: TextInputType.number,
+          textAlign: TextAlign.center,
+          maxLength: 6,
+          obscureText: true,
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          decoration: const InputDecoration(
+            hintText: 'Entrez le PIN à 6 chiffres',
+            border: OutlineInputBorder(),
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Annuler'),
+        ),
+        TextButton(
+          onPressed: _submitPin,
+          child: const Text('Valider'),
+        ),
+      ],
     );
   }
 }
