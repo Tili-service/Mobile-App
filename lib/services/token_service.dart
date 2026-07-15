@@ -1,9 +1,13 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 enum TokenType { shop, user, license }
 
 class TokenService {
-  static const _storage = FlutterSecureStorage();
+  static FlutterSecureStorage _storage = const FlutterSecureStorage();
+
+  @visibleForTesting
+  static set storage(FlutterSecureStorage s) => _storage = s;
 
   /* The TokenService class provides static methods for saving, retrieving, and deleting
   authentication tokens and administrator PINs using the FlutterSecureStorage package.

@@ -14,10 +14,17 @@ class AuthService {
   in JSON format. If the response status code is 200 (indicating a successful login),
   it decodes the response body to extract and return the authentication token.
   If the login fails, it returns null. */
-  static String get baseUrl => dotenv.env['BACKEND_URL'] ?? (Platform.isAndroid ? "http://10.0.2.2:8000" : "http://127.0.0.1:8000");
-  static Future<String?> login(String email, String password) async {
+  static String get baseUrl {
+    try {
+      final env = dotenv.env['BACKEND_URL'];
+      if (env != null && env.isNotEmpty) return env;
+    } catch (_) {}
+    return Platform.isAndroid ? "http://10.0.2.2:8000" : "http://127.0.0.1:8000";
+  }
+  static Future<String?> login(String email, String password, {http.Client? client}) async {
+    client ??= http.Client();
     final url = Uri.parse('$baseUrl/account/login');
-    final response = await http.post(
+    final response = await client.post(
       url,
       headers: {
         "Content-Type": "application/json",
@@ -42,9 +49,10 @@ class AuthService {
   it decodes the response body to extract and return the list of licenses. If the
   request fails, it returns null. This method allows the application to retrieve the
   licenses associated with the authenticated user, which can then be displayed in the UI. */
-  static Future<List<dynamic>?> getLicenses(String token) async {
+  static Future<List<dynamic>?> getLicenses(String token, {http.Client? client}) async {
+    client ??= http.Client();
     final url = Uri.parse('$baseUrl/licences');
-    final response = await http.get(
+    final response = await client.get(
       url,
       headers: {
         "Authorization": "Bearer $token",
@@ -67,9 +75,10 @@ class AuthService {
   data as a Map<String, dynamic>. If the request fails, it returns null. This method
   allows the application to verify the entered PIN against the backend and retrieve any
   associated session information for the selected license. */
-  static Future<Map<String, dynamic>?> getPin(String token, String pinEntered, String storeId) async {
+  static Future<Map<String, dynamic>?> getPin(String token, String pinEntered, String storeId, {http.Client? client}) async {
+    client ??= http.Client();
     final url = Uri.parse('$baseUrl/profile/login/pin');
-    final response = await http.post(
+    final response = await client.post(
       url,
       headers: {
         "Authorization": "Bearer $token",
@@ -95,9 +104,10 @@ class AuthService {
   it decodes the response body to extract and return the catalog data. If the
   request fails, it returns null. This method allows the application to retrieve the
   catalog for the current session. */
-  static Future<List<dynamic>?> getCatalog(String token) async {
+  static Future<List<dynamic>?> getCatalog(String token, {http.Client? client}) async {
+    client ??= http.Client();
     final url = Uri.parse('$baseUrl/catalog');
-    final response = await http.get(
+    final response = await client.get(
       url,
       headers: {
         "Authorization": "Bearer $token",
@@ -118,9 +128,10 @@ class AuthService {
   it decodes the response body to extract and return the list of categories. If the
   request fails, it returns null. This method allows the application to retrieve the
   categories for the current session. */
-  static Future<List<dynamic>?> getCategories(String token) async {
+  static Future<List<dynamic>?> getCategories(String token, {http.Client? client}) async {
+    client ??= http.Client();
     final url = Uri.parse('$baseUrl/categorie');
-    final response = await http.get(
+    final response = await client.get(
       url,
       headers: {
         "Authorization": "Bearer $token",
@@ -138,9 +149,10 @@ class AuthService {
   /* The updateCatalog method takes an authentication token, a catalog ID, and data to update,
   constructs a PUT request to the backend API's catalog update endpoint, and includes the token
   in the Authorization header. It returns true if the update is successful (status 200). */
-  static Future<bool> updateCatalog(String token, int catalogId, Map<String, dynamic> data) async {
+  static Future<bool> updateCatalog(String token, int catalogId, Map<String, dynamic> data, {http.Client? client}) async {
+    client ??= http.Client();
     final url = Uri.parse('$baseUrl/catalog/$catalogId');
-    final response = await http.put(
+    final response = await client.put(
       url,
       headers: {
         "Authorization": "Bearer $token",
@@ -155,9 +167,10 @@ class AuthService {
   /* The deleteCatalog method takes an authentication token and a catalog ID, constructs
   a DELETE request to the backend API's catalog delete endpoint, and includes the token
   in the Authorization header. It returns true if the deletion is successful (status 200). */
-  static Future<bool> deleteCatalog(String token, int catalogId) async {
+  static Future<bool> deleteCatalog(String token, int catalogId, {http.Client? client}) async {
+    client ??= http.Client();
     final url = Uri.parse('$baseUrl/catalog/$catalogId');
-    final response = await http.delete(
+    final response = await client.delete(
       url,
       headers: {
         "Authorization": "Bearer $token",
@@ -170,9 +183,10 @@ class AuthService {
   /* The createCatalog method takes an authentication token, name, and description, constructs
   a POST request to the backend API's catalog create endpoint, and includes the token
   in the Authorization header. It returns true if the creation is successful (status 201). */
-  static Future<bool> createCatalog(String token, String name, String description) async {
+  static Future<bool> createCatalog(String token, String name, String description, {http.Client? client}) async {
+    client ??= http.Client();
     final url = Uri.parse('$baseUrl/catalog');
-    final response = await http.post(
+    final response = await client.post(
       url,
       headers: {
         "Authorization": "Bearer $token",
@@ -190,9 +204,10 @@ class AuthService {
   /* The createSession method takes an authentication token, name, and level, constructs
   a POST request to the backend API's session create endpoint, and includes the token
   in the Authorization header. It returns true if the creation is successful (status 201). */
-  static Future<bool> createSession(String token, String name, int level) async {
+  static Future<bool> createSession(String token, String name, int level, {http.Client? client}) async {
+    client ??= http.Client();
     final url = Uri.parse('$baseUrl/profile');
-    final response = await http.post(
+    final response = await client.post(
       url,
       headers: {
         "Authorization": "Bearer $token",
@@ -213,9 +228,10 @@ class AuthService {
   it decodes the response body to extract and return the list of profiles (sessions). If the
   request fails, it returns null. This method allows the application to retrieve the
   list of profiles for the store. */
-  static Future<List<dynamic>?> getSessions(String token, int storeId) async {
+  static Future<List<dynamic>?> getSessions(String token, int storeId, {http.Client? client}) async {
+    client ??= http.Client();
     final url = Uri.parse('$baseUrl/profile/allProfilesByStoreId/$storeId');
-    final response = await http.get(
+    final response = await client.get(
       url,
       headers: {
         "Authorization": "Bearer $token",
@@ -233,9 +249,10 @@ class AuthService {
   /* The createCategory method takes an authentication token, catalog ID, and type, constructs
   a POST request to the backend API's categorie create endpoint, and includes the token
   in the Authorization header. It returns true if the creation is successful (status 201). */
-  static Future<bool> createCategory(String token, int catalogId, String type) async {
+  static Future<bool> createCategory(String token, int catalogId, String type, {http.Client? client}) async {
+    client ??= http.Client();
     final url = Uri.parse('$baseUrl/categorie');
-    final response = await http.post(
+    final response = await client.post(
       url,
       headers: {
         "Authorization": "Bearer $token",
