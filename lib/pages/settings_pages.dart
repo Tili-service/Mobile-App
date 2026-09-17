@@ -3,6 +3,7 @@ import '../services/token_service.dart';
 import '../services/auth_service.dart';
 import 'create_catalog_page.dart';
 import 'catalog_edit_page.dart';
+import 'package:jwt_decoder/jwt_decoder.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({
@@ -16,7 +17,7 @@ class SettingsPage extends StatefulWidget {
   final bool isFullScreen;
   final VoidCallback onToggleFullScreen;
   final Map<String, dynamic> license;
-  final int? currentCatalogId;
+  final String? currentCatalogId;
 
   @override
   State<SettingsPage> createState() => _SettingsPageState();
@@ -24,12 +25,20 @@ class SettingsPage extends StatefulWidget {
 
 class _SettingsPageState extends State<SettingsPage> {
   int _selectedIndex = 0;
-  final List<String> _menuItems = ['Compte', 'Analytiques', 'Profils', 'Catalogues', 'TPE', 'Informations'];
+  final List<String> _menuItems = [
+    'Compte',
+    'Analytiques',
+    'Profils',
+    'Catalogues',
+    'TPE',
+    'Informations',
+  ];
   List<dynamic>? _catalogs;
   bool _isLoadingCatalogs = true;
-  int? _currentCatalogId;
+  String? _currentCatalogId;
   List<dynamic>? _sessions;
   bool _isLoadingSessions = true;
+  String? _currentProfilePin;
   final Map<int, String> _levelNames = {
     1: 'Super Administrateur',
     2: 'Administrateur',
@@ -47,14 +56,18 @@ class _SettingsPageState extends State<SettingsPage> {
 
   Future<void> _loadCatalogs() async {
     final token = await TokenService.getToken(TokenType.user);
-    if (token != null) {
-      final catalogs = await AuthService.getCatalog(token);
+    final storeId = await TokenService.getToken(TokenType.license);
+    if (token != null && storeId != null) {
+      final catalogs = await AuthService.getCatalog(token, storeId);
+      if (!mounted) return;
       setState(() {
-        _catalogs = catalogs;
+        _catalogs = catalogs ?? [];
         _isLoadingCatalogs = false;
       });
     } else {
+      if (!mounted) return;
       setState(() {
+        _catalogs = [];
         _isLoadingCatalogs = false;
       });
     }
@@ -64,81 +77,44 @@ class _SettingsPageState extends State<SettingsPage> {
     final token = await TokenService.getToken(TokenType.user);
     if (token != null) {
       try {
-        final storeId = widget.license['store']['store_id'] as int;
+        final storeId = await TokenService.getToken(TokenType.license);
+        if (storeId == null) {
+          if (mounted) {
+            setState(() {
+              _isLoadingSessions = false;
+            });
+          }
+          return;
+        }
         final sessions = await AuthService.getSessions(token, storeId);
+        if (!mounted) return;
+        final profileId = JwtDecoder.decode(token)['profileID']?.toString();
+        final currentSession = sessions
+            ?.cast<Map<String, dynamic>?>()
+            .firstWhere(
+              (session) => session?['profile_id']?.toString() == profileId,
+              orElse: () => null,
+            );
         setState(() {
           _sessions = sessions;
+          _currentProfilePin = currentSession?['pin']?.toString();
           _isLoadingSessions = false;
         });
       } catch (e) {
         print('Error loading sessions: $e');
+        if (mounted) {
+          setState(() {
+            _isLoadingSessions = false;
+          });
+        }
+      }
+    } else {
+      if (mounted) {
         setState(() {
           _isLoadingSessions = false;
         });
       }
-    } else {
-      setState(() {
-        _isLoadingSessions = false;
-      });
     }
-  }
-
-  void _editCatalog(dynamic catalog) {
-    final TextEditingController controller = TextEditingController(text: catalog['name'] ?? '');
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Modifier le catalogue'),
-        content: TextField(
-          controller: controller,
-          decoration: const InputDecoration(labelText: 'Nom du catalogue'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Annuler'),
-          ),
-          TextButton(
-            onPressed: () async {
-              final token = await TokenService.getToken(TokenType.user);
-              if (token != null) {
-                await AuthService.updateCatalog(token, catalog['id'], {'name': controller.text});
-                _loadCatalogs();
-              }
-              Navigator.of(context).pop();
-            },
-            child: const Text('Sauvegarder'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _deleteCatalog(dynamic catalog) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Supprimer le catalogue'),
-        content: const Text('Êtes-vous sûr de vouloir supprimer ce catalogue ?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Annuler'),
-          ),
-          TextButton(
-            onPressed: () async {
-              final token = await TokenService.getToken(TokenType.user);
-              if (token != null) {
-                await AuthService.deleteCatalog(token, catalog['id']);
-                _loadCatalogs();
-              }
-              Navigator.of(context).pop();
-            },
-            child: const Text('Supprimer'),
-          ),
-        ],
-      ),
-    );
   }
 
   Widget _buildContent() {
@@ -176,11 +152,24 @@ class _SettingsPageState extends State<SettingsPage> {
                           const Icon(Icons.confirmation_number, size: 24),
                           const SizedBox(width: 8),
                           Text(
-                            'Numéro de licence: ${widget.license['id'] ?? 'N/A'}',
+                            'ID licence: ${widget.license['licence_id'] ?? widget.license['id'] ?? 'N/A'}',
                             style: const TextStyle(fontSize: 18),
                           ),
                         ],
                       ),
+                      if (_currentProfilePin != null) ...[
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            const Icon(Icons.pin, size: 24),
+                            const SizedBox(width: 8),
+                            Text(
+                              'PIN: $_currentProfilePin',
+                              style: const TextStyle(fontSize: 18),
+                            ),
+                          ],
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -253,21 +242,26 @@ class _SettingsPageState extends State<SettingsPage> {
               child: Container(
                 padding: const EdgeInsets.all(16),
                 child: _isLoadingSessions
-                  ? const Center(child: CircularProgressIndicator())
-                  : _sessions != null
+                    ? const Center(child: CircularProgressIndicator())
+                    : _sessions != null
                     ? GridView.builder(
-                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 4,
-                          crossAxisSpacing: 8,
-                          mainAxisSpacing: 8,
-                        ),
+                        gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: 4,
+                              crossAxisSpacing: 8,
+                              mainAxisSpacing: 8,
+                            ),
                         itemCount: _sessions!.length + 1,
                         itemBuilder: (context, index) {
                           if (index == 0) {
                             return GestureDetector(
                               onTap: () {
                                 final nameController = TextEditingController();
-                                const Map<String, int> levels = {'Salarié': 4, 'Manager': 3, 'Admin': 2};
+                                const Map<String, int> levels = {
+                                  'Salarié': 4,
+                                  'Manager': 3,
+                                  'Admin': 2,
+                                };
                                 String selectedLevel = 'Salarié';
                                 showDialog(
                                   context: context,
@@ -279,37 +273,55 @@ class _SettingsPageState extends State<SettingsPage> {
                                         children: [
                                           TextField(
                                             controller: nameController,
-                                            decoration: const InputDecoration(labelText: 'Nom du profil'),
+                                            decoration: const InputDecoration(
+                                              labelText: 'Nom du profil',
+                                            ),
                                           ),
                                           const SizedBox(height: 16),
                                           const Text('Niveau d\'accès:'),
                                           Row(
-                                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                                            children: levels.keys.map((level) => Expanded(
-                                              child: RadioListTile<String>(
-                                                title: Text(level),
-                                                value: level,
-                                                groupValue: selectedLevel,
-                                                onChanged: (value) {
-                                                  setState(() {
-                                                    selectedLevel = value!;
-                                                  });
-                                                },
-                                              ),
-                                            )).toList(),
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.spaceEvenly,
+                                            children: levels.keys
+                                                .map(
+                                                  (level) => Expanded(
+                                                    child:
+                                                        RadioListTile<String>(
+                                                          title: Text(level),
+                                                          value: level,
+                                                          groupValue:
+                                                              selectedLevel,
+                                                          onChanged: (value) {
+                                                            setState(() {
+                                                              selectedLevel =
+                                                                  value!;
+                                                            });
+                                                          },
+                                                        ),
+                                                  ),
+                                                )
+                                                .toList(),
                                           ),
                                         ],
                                       ),
                                       actions: [
                                         TextButton(
-                                          onPressed: () => Navigator.of(context).pop(),
+                                          onPressed: () =>
+                                              Navigator.of(context).pop(),
                                           child: const Text('Annuler'),
                                         ),
                                         TextButton(
                                           onPressed: () async {
-                                            final token = await TokenService.getToken(TokenType.user);
+                                            final token =
+                                                await TokenService.getToken(
+                                                  TokenType.user,
+                                                );
                                             if (token != null) {
-                                              await AuthService.createSession(token, nameController.text, levels[selectedLevel]!);
+                                              await AuthService.createSession(
+                                                token,
+                                                nameController.text,
+                                                levels[selectedLevel]!,
+                                              );
                                               _loadSessions();
                                             }
                                             Navigator.of(context).pop();
@@ -338,35 +350,63 @@ class _SettingsPageState extends State<SettingsPage> {
                                 showDialog(
                                   context: context,
                                   builder: (context) => AlertDialog(
-                                    insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 80),
+                                    insetPadding: const EdgeInsets.symmetric(
+                                      horizontal: 40,
+                                      vertical: 80,
+                                    ),
                                     title: Text(
                                       session['name'] ?? 'Profil',
-                                      style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                                      style: const TextStyle(
+                                        fontSize: 24,
+                                        fontWeight: FontWeight.bold,
+                                      ),
                                     ),
                                     content: Column(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
                                         ListTile(
-                                          leading: const Icon(Icons.security, size: 32),
-                                          title: const Text('Niveau d\'accès', style: TextStyle(fontSize: 20)),
-                                          subtitle: Text(_levelNames[session['level_access']] ?? 'Inconnu', style: TextStyle(fontSize: 18)),
+                                          leading: const Icon(
+                                            Icons.security,
+                                            size: 32,
+                                          ),
+                                          title: const Text(
+                                            'Niveau d\'accès',
+                                            style: TextStyle(fontSize: 20),
+                                          ),
+                                          subtitle: Text(
+                                            _levelNames[session['level_access']] ??
+                                                'Inconnu',
+                                            style: TextStyle(fontSize: 18),
+                                          ),
                                         ),
                                         ListTile(
                                           leading: const Icon(Icons.pin),
                                           title: const Text('PIN'),
-                                          subtitle: Text(session['pin'] ?? 'N/A'),
+                                          subtitle: Text(
+                                            session['pin'] ?? 'N/A',
+                                          ),
                                         ),
                                         ListTile(
-                                          leading: const Icon(Icons.check_circle),
+                                          leading: const Icon(
+                                            Icons.check_circle,
+                                          ),
                                           title: const Text('Actif'),
-                                          subtitle: Text(session['is_active'] ? 'Oui' : 'Non'),
+                                          subtitle: Text(
+                                            session['is_active']
+                                                ? 'Oui'
+                                                : 'Non',
+                                          ),
                                         ),
                                       ],
                                     ),
                                     actions: [
                                       TextButton(
-                                        onPressed: () => Navigator.of(context).pop(),
-                                        child: const Text('Fermer', style: TextStyle(fontSize: 18)),
+                                        onPressed: () =>
+                                            Navigator.of(context).pop(),
+                                        child: const Text(
+                                          'Fermer',
+                                          style: TextStyle(fontSize: 18),
+                                        ),
                                       ),
                                     ],
                                   ),
@@ -418,8 +458,8 @@ class _SettingsPageState extends State<SettingsPage> {
                 ),
                 padding: const EdgeInsets.all(16),
                 child: _isLoadingCatalogs
-                  ? const Center(child: CircularProgressIndicator())
-                  : _catalogs != null && _catalogs!.isNotEmpty
+                    ? const Center(child: CircularProgressIndicator())
+                    : _catalogs != null && _catalogs!.isNotEmpty
                     ? ListView.builder(
                         itemCount: _catalogs!.length,
                         itemBuilder: (context, index) {
@@ -427,19 +467,32 @@ class _SettingsPageState extends State<SettingsPage> {
                           return Container(
                             margin: const EdgeInsets.symmetric(vertical: 4),
                             decoration: BoxDecoration(
-                              border: Border.all(color: catalog['id'] == _currentCatalogId ? Colors.orange : Colors.grey),
+                              border: Border.all(
+                                color:
+                                    catalog['catalog_id']?.toString() ==
+                                        _currentCatalogId
+                                    ? Colors.orange
+                                    : Colors.grey,
+                              ),
                               borderRadius: BorderRadius.circular(8),
-                              color: catalog['id'] == _currentCatalogId ? Colors.orange.withOpacity(0.1) : null,
+                              color:
+                                  catalog['catalog_id']?.toString() ==
+                                      _currentCatalogId
+                                  ? Colors.orange.withOpacity(0.1)
+                                  : null,
                             ),
                             child: SizedBox(
                               height: 100,
                               child: ListTile(
-                                title: Text(catalog['name'] ?? 'Catalogue ${index + 1}'),
+                                title: Text(
+                                  catalog['name'] ?? 'Catalogue ${index + 1}',
+                                ),
                                 onTap: () {
                                   Navigator.push(
                                     context,
                                     MaterialPageRoute(
-                                      builder: (context) => CatalogEditPage(catalog: catalog),
+                                      builder: (context) =>
+                                          CatalogEditPage(catalog: catalog),
                                     ),
                                   ).then((result) {
                                     if (result == true) {
@@ -469,9 +522,7 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Paramètres'),
-      ),
+      appBar: AppBar(title: const Text('Paramètres')),
       body: Row(
         children: [
           SizedBox(
