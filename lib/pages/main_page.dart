@@ -30,18 +30,20 @@ class _MainPageState extends State<MainPage> {
   String _selectedCategory = 'Tous';
   String _userName = 'Utilisateur';
   String _storeName = 'Commerce';
-  String? _catalogName;
-  int? _currentCatalogId;
+  String? _currentCatalogId;
   List<dynamic>? _catalog;
   bool _isLoadingCatalog = true;
   List<dynamic>? _categories;
+  List<dynamic> _items = [];
+  final List<Map<String, dynamic>> _cartItems = [];
+  dynamic _selectedProduct;
+  String _quantityInput = '';
 
   @override
   void initState() {
     super.initState();
     _loadUserInfo();
     _loadCatalog();
-    _loadCategories();
   }
 
   Future<void> _loadUserInfo() async {
@@ -58,21 +60,34 @@ class _MainPageState extends State<MainPage> {
     }
     setState(() {
       _storeName = widget.license['store']?['name'] ?? 'Commerce';
-      _catalogName = widget.license['catalog']?['name'] ?? 'Catalogue';
-      _currentCatalogId = widget.license['catalog']?['id'] as int?;
     });
   }
 
   Future<void> _loadCatalog() async {
     final token = await TokenService.getToken(TokenType.user);
-    if (token != null) {
-      final catalog = await AuthService.getCatalog(token);
+    final storeId = await TokenService.getToken(TokenType.license);
+    if (token != null && storeId != null) {
+      final catalog = await AuthService.getCatalog(token, storeId);
+      final catalogId = catalog != null && catalog.isNotEmpty
+          ? catalog.first['catalog_id']?.toString()
+          : null;
+      if (!mounted) return;
+        final categories = catalogId == null
+          ? <dynamic>[]
+          : await AuthService.getCategories(token, catalogId) ?? [];
+        final items = await AuthService.getItems(token) ?? [];
+        final catalogCategoryIds = categories
+          .map((category) => category['categorie_id']?.toString())
+          .whereType<String>()
+          .toSet();
       setState(() {
         _catalog = catalog;
         _isLoadingCatalog = false;
-        if (_catalog != null && _catalog!.isNotEmpty) {
-          _catalogName = _catalog![0]['name'] ?? 'Catalogue';
-        }
+        _categories = categories;
+        _items = items
+          .where((item) => catalogCategoryIds.contains(item['categorie_id']?.toString()))
+          .toList();
+        _currentCatalogId = catalogId;
       });
     } else {
       setState(() {
@@ -81,14 +96,86 @@ class _MainPageState extends State<MainPage> {
     }
   }
 
-  Future<void> _loadCategories() async {
-    final token = await TokenService.getToken(TokenType.user);
-    if (token != null) {
-      final categories = await AuthService.getCategories(token);
-      setState(() {
-        _categories = categories;
-      });
+  List<dynamic> get _visibleItems {
+    if (_selectedCategory == 'Tous') {
+      return _items;
     }
+    final selectedCategory = _categories?.cast<Map<String, dynamic>?>().firstWhere(
+      (category) => category?['type'] == _selectedCategory,
+      orElse: () => null,
+    );
+    final categoryId = selectedCategory?['categorie_id']?.toString();
+    return _items
+        .where((item) => item['categorie_id']?.toString() == categoryId)
+        .toList();
+  }
+
+  double _itemPrice(dynamic item) {
+    return double.tryParse(item['price']?.toString() ?? '') ?? 0;
+  }
+
+  double get _cartTotal {
+    return _cartItems.fold(0, (total, item) {
+      return total + (_itemPrice(item['product']) * (item['quantity'] as int));
+    });
+  }
+
+  void _addToCart(dynamic product, {int quantity = 1}) {
+    final productId = product['item_id']?.toString();
+    final existingIndex = _cartItems.indexWhere(
+      (item) => item['product']['item_id']?.toString() == productId,
+    );
+
+    setState(() {
+      if (existingIndex == -1) {
+        _cartItems.add({'product': product, 'quantity': quantity});
+      } else {
+        _cartItems[existingIndex]['quantity'] += quantity;
+      }
+    });
+  }
+
+  void _removeCartItem(int index) {
+    setState(() {
+      _cartItems.removeAt(index);
+    });
+  }
+
+  void _clearCart() {
+    if (_cartItems.isEmpty) return;
+    setState(() {
+      _cartItems.clear();
+      _selectedProduct = null;
+      _quantityInput = '';
+    });
+  }
+
+  void _handleCalculatorButton(String label) {
+    if (label == 'X') {
+      setState(() {
+        _quantityInput = '';
+      });
+      return;
+    }
+
+    if (label == '=') {
+      final quantity = int.tryParse(_quantityInput);
+      if (_selectedProduct == null || quantity == null || quantity <= 0) {
+        _showSnackBar('Sélectionnez un produit et saisissez une quantité');
+        return;
+      }
+      if (quantity > 1) {
+        _addToCart(_selectedProduct, quantity: quantity - 1);
+      }
+      setState(() {
+        _quantityInput = '';
+      });
+      return;
+    }
+
+    setState(() {
+      _quantityInput = '$_quantityInput$label';
+    });
   }
 
   void _showSnackBar(String message) {
@@ -153,9 +240,7 @@ class _MainPageState extends State<MainPage> {
                   : const Color(0xFFE1BC29),
               foregroundColor: Colors.black,
             ),
-            onPressed: () {
-              print('Pressed $label');
-            },
+            onPressed: () => _handleCalculatorButton(label),
             child: Text(
               label,
               style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
@@ -219,41 +304,55 @@ class _MainPageState extends State<MainPage> {
                         child: SingleChildScrollView(
                           scrollDirection: Axis.horizontal,
                           child: Row(
-                            children: (_categories ?? [])
-                                .map(
-                                  (category) => Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 4.0,
-                                    ),
-                                    child: ElevatedButton(
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor:
-                                            category['name'] ==
-                                                _selectedCategory
-                                            ? const Color(0xFFE15554)
-                                            : Colors.grey[300],
-                                        foregroundColor:
-                                            category['name'] ==
-                                                _selectedCategory
-                                            ? Colors.white
-                                            : Colors.black,
-                                      ),
-                                      onPressed: () {
-                                        setState(() {
-                                          _selectedCategory =
-                                              category['name'] ?? 'Tous';
-                                        });
-                                        print(
-                                          'Selected ${category['name'] ?? 'Unknown'}',
-                                        );
-                                      },
-                                      child: Text(
-                                        category['name'] ?? 'Unknown',
-                                      ),
-                                    ),
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 4.0,
+                                ),
+                                child: ElevatedButton(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: _selectedCategory == 'Tous'
+                                        ? const Color(0xFFE15554)
+                                        : Colors.grey[300],
+                                    foregroundColor: _selectedCategory == 'Tous'
+                                        ? Colors.white
+                                        : Colors.black,
                                   ),
-                                )
-                                .toList(),
+                                  onPressed: () {
+                                    setState(() {
+                                      _selectedCategory = 'Tous';
+                                    });
+                                  },
+                                  child: const Text('TOUS'),
+                                ),
+                              ),
+                              ...(_categories ?? []).map(
+                                (category) => Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 4.0,
+                                  ),
+                                  child: ElevatedButton(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor:
+                                          category['type'] == _selectedCategory
+                                          ? const Color(0xFFE15554)
+                                          : Colors.grey[300],
+                                      foregroundColor:
+                                          category['type'] == _selectedCategory
+                                          ? Colors.white
+                                          : Colors.black,
+                                    ),
+                                    onPressed: () {
+                                      setState(() {
+                                        _selectedCategory =
+                                            category['type'] ?? 'Tous';
+                                      });
+                                    },
+                                    child: Text(category['type'] ?? 'Unknown'),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ),
@@ -286,9 +385,35 @@ class _MainPageState extends State<MainPage> {
                                 ),
                               )
                             : _catalog != null && _catalog!.isNotEmpty
-                            ? Center(
-                                child: Text(_catalogName ?? 'Catalogue chargé'),
-                              )
+                            ? _visibleItems.isEmpty
+                                ? const Center(child: Text('Aucun produit'))
+                                : ListView.builder(
+                                    padding: const EdgeInsets.all(8),
+                                    itemCount: _visibleItems.length,
+                                    itemBuilder: (context, index) {
+                                      final item = _visibleItems[index];
+                                      return Card(
+                                        child: ListTile(
+                                          onTap: () {
+                                            setState(() {
+                                              _selectedProduct = item;
+                                            });
+                                            _addToCart(item);
+                                          },
+                                          title: Text(item['name'] ?? 'Produit'),
+                                          subtitle: Text(
+                                            'Catégorie: ${item['categorie']?['type'] ?? 'Inconnue'}',
+                                          ),
+                                          trailing: Text(
+                                            '${item['price'] ?? '0.00'} €',
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  )
                             : GestureDetector(
                                 onTap: () async {
                                   final result = await showDialog(
@@ -328,24 +453,98 @@ class _MainPageState extends State<MainPage> {
                     height: safeHeight,
                     child: Container(
                       height: double.infinity,
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        border: Border.all(
-                          color: const Color(0xFF7768AE),
-                          width: 1,
-                        ),
-                        borderRadius: BorderRadius.circular(8.0),
+                      child: Column(
+                        children: [
+                          Expanded(
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                border: Border.all(
+                                  color: const Color(0xFF7768AE),
+                                  width: 1,
+                                ),
+                                borderRadius: BorderRadius.circular(8.0),
+                              ),
+                              padding: const EdgeInsets.all(8.0),
+                              margin: const EdgeInsets.only(top: 16),
+                              child: Column(
+                                children: [
+                                  SizedBox(
+                                    height: 40,
+                                    child: Row(
+                                      mainAxisAlignment: MainAxisAlignment.end,
+                                      children: [
+                                        IconButton(
+                                          onPressed: _cartItems.isEmpty ? null : _clearCart,
+                                          icon: const Icon(Icons.delete_outline),
+                                          tooltip: 'Vider le panier',
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: _cartItems.isEmpty
+                                        ? const Center(child: Text('Aucun produit sélectionné'))
+                                        : ListView.separated(
+                                            itemCount: _cartItems.length,
+                                            separatorBuilder: (_, __) => const Divider(),
+                                            itemBuilder: (context, index) {
+                                              final cartItem = _cartItems[index];
+                                              final product = cartItem['product'];
+                                              final quantity = cartItem['quantity'] as int;
+                                              return ListTile(
+                                                dense: true,
+                                                title: Text(product['name'] ?? 'Produit'),
+                                                subtitle: Text('x$quantity'),
+                                                trailing: Row(
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  children: [
+                                                    Text(
+                                                      '${(_itemPrice(product) * quantity).toStringAsFixed(2)} €',
+                                                    ),
+                                                    IconButton(
+                                                      onPressed: () => _removeCartItem(index),
+                                                      icon: const Icon(Icons.delete_outline),
+                                                      tooltip: 'Retirer du panier',
+                                                    ),
+                                                  ],
+                                                ),
+                                              );
+                                            },
+                                          ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text(
+                                  'Total',
+                                  style: TextStyle(fontWeight: FontWeight.bold),
+                                ),
+                                Text(
+                                  '${_cartTotal.toStringAsFixed(2)} €',
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
-                      padding: const EdgeInsets.all(8.0),
-                      margin: const EdgeInsets.only(top: 16, bottom: 16),
-                      child: Align(alignment: Alignment.topCenter),
                     ),
                   ),
                   Container(
                     margin: EdgeInsets.only(left: spacing),
                     child: SizedBox(
                       width: partWidth - spacing / 2,
-                      height: safeHeight,
+                      height: safeHeight - 8,
                       child: Column(
                         children: [
                           Expanded(
@@ -353,58 +552,69 @@ class _MainPageState extends State<MainPage> {
                               color: Colors.white,
                               padding: const EdgeInsets.all(8.0),
                               margin: const EdgeInsets.only(right: 16, top: 16),
-                              child: SingleChildScrollView(
-                                child: Column(
-                                  children: [
-                                    Row(
-                                      children: [
-                                        _calcButton('1'),
-                                        const SizedBox(width: 4),
-                                        _calcButton('2'),
-                                        const SizedBox(width: 4),
-                                        _calcButton('3'),
-                                      ],
+                              child: Column(
+                                children: [
+                                  SizedBox(
+                                    height: 24,
+                                    child: null
+                                  ),
+                                  Expanded(
+                                    child: SingleChildScrollView(
+                                      child: Column(
+                                        children: [
+                                          Row(
+                                            children: [
+                                              _calcButton('1'),
+                                              const SizedBox(width: 4),
+                                              _calcButton('2'),
+                                              const SizedBox(width: 4),
+                                              _calcButton('3'),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 12),
+                                          Row(
+                                            children: [
+                                              _calcButton('4'),
+                                              const SizedBox(width: 4),
+                                              _calcButton('5'),
+                                              const SizedBox(width: 4),
+                                              _calcButton('6'),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 12),
+                                          Row(
+                                            children: [
+                                              _calcButton('7'),
+                                              const SizedBox(width: 4),
+                                              _calcButton('8'),
+                                              const SizedBox(width: 4),
+                                              _calcButton('9'),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 12),
+                                          Row(
+                                            children: [
+                                              _calcButton('X'),
+                                              const SizedBox(width: 4),
+                                              _calcButton('0'),
+                                              const SizedBox(width: 4),
+                                              _calcButton('='),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
                                     ),
-                                    const SizedBox(height: 12),
-                                    Row(
-                                      children: [
-                                        _calcButton('4'),
-                                        const SizedBox(width: 4),
-                                        _calcButton('5'),
-                                        const SizedBox(width: 4),
-                                        _calcButton('6'),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 12),
-                                    Row(
-                                      children: [
-                                        _calcButton('7'),
-                                        const SizedBox(width: 4),
-                                        _calcButton('8'),
-                                        const SizedBox(width: 4),
-                                        _calcButton('9'),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 12),
-                                    Row(
-                                      children: [
-                                        _calcButton('X'),
-                                        const SizedBox(width: 4),
-                                        _calcButton('0'),
-                                        const SizedBox(width: 4),
-                                        _calcButton('='),
-                                      ],
-                                    ),
-                                  ],
-                                ),
+                                  ),
+                                ],
                               ),
                             ),
                           ),
                           SizedBox(height: spacing),
-                          Expanded(
+                          SizedBox(
+                            height: 248,
                             child: Container(
                               width: partWidth - spacing / 2,
-                              padding: const EdgeInsets.all(16),
+                              padding: const EdgeInsets.all(12),
                               margin: const EdgeInsets.only(
                                 right: 16,
                                 bottom: 16,
@@ -415,25 +625,25 @@ class _MainPageState extends State<MainPage> {
                                 children: [
                                   SizedBox(
                                     width: double.infinity,
-                                    height: 100,
+                                    height: 56,
                                     child: ElevatedButton(
                                       onPressed: () {},
                                       child: const Text('Carte'),
                                     ),
                                   ),
-                                  const SizedBox(height: 16),
+                                  const SizedBox(height: 8),
                                   SizedBox(
                                     width: double.infinity,
-                                    height: 100,
+                                    height: 56,
                                     child: ElevatedButton(
                                       onPressed: () {},
                                       child: const Text('Espèces'),
                                     ),
                                   ),
-                                  const SizedBox(height: 16),
+                                  const SizedBox(height: 8),
                                   SizedBox(
                                     width: double.infinity,
-                                    height: 100,
+                                    height: 56,
                                     child: ElevatedButton(
                                       onPressed: () {},
                                       child: const Text('Paiement multiple'),
