@@ -87,8 +87,14 @@ class _CreateCatalogDialogState extends State<CreateCatalogDialog> {
                       final catalogDescription = catalogDescriptionController.text.trim();
                       if (catalogName.isNotEmpty) {
                         final token = await TokenService.getToken(TokenType.user);
-                        if (token != null) {
-                          final success = await AuthService.createCatalog(token, catalogName, catalogDescription);
+                        final storeId = await TokenService.getToken(TokenType.license);
+                        if (token != null && storeId != null) {
+                          final success = await AuthService.createCatalog(
+                            token,
+                            storeId,
+                            catalogName,
+                            catalogDescription,
+                          );
                           if (success) {
                             Navigator.of(context).pop(true);
                           } else {
