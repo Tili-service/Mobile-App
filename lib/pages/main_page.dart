@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'session_page.dart';
 import '../services/token_service.dart';
 import '../services/catalog_service.dart';
@@ -7,6 +6,8 @@ import 'package:jwt_decoder/jwt_decoder.dart';
 import '../services/active_catalog_service.dart';
 import '../services/profile_service.dart';
 import '../utils/pricing.dart';
+import '../theme/theme.dart';
+import '../widgets/widgets.dart';
 import 'settings_pages.dart';
 
 /* POS screen of the logged-in cashier: products of the active catalogue
@@ -184,11 +185,7 @@ class _MainPageState extends State<MainPage> {
     });
   }
 
-  void _showSnackBar(String message) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
-  }
+  void _showSnackBar(String message, {bool error = true}) => showMessage(context, message, error: error);
 
   Future<String?> _showSettingsPinDialog() async {
     return showDialog<String>(
@@ -256,417 +253,360 @@ class _MainPageState extends State<MainPage> {
     );
   }
 
-  Widget _calcButton(String label) {
-    final isDigit = int.tryParse(label) != null;
-    return Expanded(
-      child: Padding(
-        padding: const EdgeInsets.all(2.0),
-        child: AspectRatio(
-          aspectRatio: 1,
-          child: ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: isDigit
-                  ? const Color(0xFF3BB273)
-                  : const Color(0xFFE1BC29),
-              foregroundColor: Colors.black,
-            ),
-            onPressed: () => _handleCalculatorButton(label),
-            child: Text(
-              label,
-              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+  static const _keypad = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'X', '0', '='];
+
+  PreferredSizeWidget _appBar() {
+    final p = context.palette;
+    return AppBar(
+      automaticallyImplyLeading: false,
+      titleSpacing: TiliSpace.lg,
+      title: Row(
+        children: [
+          const BrandMark(onDark: false, size: 36, showName: false),
+          const SizedBox(width: TiliSpace.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('Caisse', style: context.text.bodySmall?.copyWith(color: p.textSubtle)),
+                Text(_storeName, overflow: TextOverflow.ellipsis),
+              ],
             ),
           ),
+        ],
+      ),
+      actions: [
+        Container(
+          padding: const EdgeInsets.fromLTRB(TiliSpace.xs, TiliSpace.xs, TiliSpace.md, TiliSpace.xs),
+          decoration: BoxDecoration(
+            color: p.surfaceMuted,
+            borderRadius: TiliRadius.all(TiliRadius.md),
+            border: Border.all(color: p.borderSubtle),
+          ),
+          child: Row(
+            children: [
+              Avatar(name: _userName, size: 30),
+              const SizedBox(width: TiliSpace.sm),
+              Text(_userName, style: context.text.labelLarge),
+            ],
+          ),
+        ),
+        const SizedBox(width: TiliSpace.md),
+        TiliIconButton(tooltip: 'Paramètres', onPressed: _openSettings, icon: Icons.settings_outlined, bordered: true),
+        const SizedBox(width: TiliSpace.sm),
+        TiliIconButton(tooltip: 'Changer de caissier', onPressed: _logout, icon: Icons.logout, bordered: true),
+        const SizedBox(width: TiliSpace.lg),
+      ],
+    );
+  }
+
+  Widget _categoryBar() {
+    return SizedBox(
+      height: TiliSizes.buttonMd,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        children: [
+          FilterPill(
+            label: 'Tous',
+            icon: Icons.grid_view_rounded,
+            selected: _selectedCategory == 'Tous',
+            onTap: () => setState(() => _selectedCategory = 'Tous'),
+          ),
+          for (final category in _categories ?? [])
+            Padding(
+              padding: const EdgeInsets.only(left: TiliSpace.sm),
+              child: FilterPill(
+                label: category['type'] ?? 'Inconnue',
+                selected: category['type'] == _selectedCategory,
+                onTap: () => setState(() => _selectedCategory = category['type'] ?? 'Tous'),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _productTile(dynamic item) {
+    final p = context.palette;
+    final selected = _selectedProduct != null && _selectedProduct['item_id'] == item['item_id'];
+    return TiliCard(
+      padding: const EdgeInsets.all(TiliSpace.md + 2),
+      highlight: selected,
+      borderColor: selected ? p.accent : null,
+      onTap: () {
+        setState(() => _selectedProduct = item);
+        _addToCart(item);
+      },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            item['name'] ?? 'Produit',
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: context.text.titleSmall,
+          ),
+          const SizedBox(height: TiliSpace.xxs),
+          Text(
+            item['categorie']?['type'] ?? '',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: context.text.bodySmall?.copyWith(color: p.textSubtle),
+          ),
+          const Spacer(),
+          Text(formatEuro(_itemPrice(item)), style: context.text.titleLarge?.copyWith(color: p.accentStrong)),
+        ],
+      ),
+    );
+  }
+
+  Widget _catalogPanel() {
+    final p = context.palette;
+    Widget content;
+    if (_isLoadingCatalog) {
+      content = const Center(child: CircularProgressIndicator());
+    } else if (_catalog == null || _catalog!.isEmpty) {
+      content = EmptyState(
+        icon: Icons.inventory_2_outlined,
+        title: 'Aucun catalogue',
+        message: 'Créez un catalogue dans les paramètres pour commencer à vendre.',
+        action: TiliButton(label: 'Ouvrir les paramètres', icon: Icons.settings_outlined, variant: TiliButtonVariant.accent, onPressed: _openSettings),
+      );
+    } else if (_visibleItems.isEmpty) {
+      content = const EmptyState(icon: Icons.search_off, title: 'Aucun produit', tone: TiliTone.neutral);
+    } else {
+      content = GridView.builder(
+        padding: const EdgeInsets.only(top: TiliSpace.xs),
+        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+          maxCrossAxisExtent: 180,
+          mainAxisExtent: 116,
+          crossAxisSpacing: TiliSpace.md,
+          mainAxisSpacing: TiliSpace.md,
+        ),
+        itemCount: _visibleItems.length,
+        itemBuilder: (context, index) => _productTile(_visibleItems[index]),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (_catalog != null && _catalog!.isNotEmpty) ...[
+          _categoryBar(),
+          const SizedBox(height: TiliSpace.sm),
+          Row(
+            children: [
+              SectionLabel('${_visibleItems.length} produit${_visibleItems.length > 1 ? 's' : ''}'),
+              const Spacer(),
+              if (_currentCatalogName != null) ...[
+                Icon(Icons.star_rounded, size: 14, color: p.accent),
+                const SizedBox(width: TiliSpace.xs),
+                Text(_currentCatalogName!, style: context.text.bodySmall?.copyWith(color: p.textSubtle)),
+              ],
+            ],
+          ),
+          const SizedBox(height: TiliSpace.sm),
+        ],
+        Expanded(child: content),
+      ],
+    );
+  }
+
+  Widget _cartPanel() {
+    final p = context.palette;
+    final count = _cartItems.fold<int>(0, (n, i) => n + (i['quantity'] as int));
+    return TiliCard(
+      padding: EdgeInsets.zero,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(TiliSpace.lg + 2, TiliSpace.md, TiliSpace.sm, TiliSpace.md),
+            child: Row(
+              children: [
+                Text('Panier', style: context.text.titleLarge),
+                const SizedBox(width: TiliSpace.sm),
+                if (count > 0) StatusBadge(label: '$count', tone: TiliTone.accent),
+                const Spacer(),
+                TiliIconButton(
+                  tooltip: 'Vider le panier',
+                  onPressed: _cartItems.isEmpty ? null : _clearCart,
+                  icon: Icons.delete_sweep_outlined,
+                  tone: TiliTone.danger,
+                ),
+              ],
+            ),
+          ),
+          const Divider(),
+          Expanded(
+            child: _cartItems.isEmpty
+                ? const EmptyState(icon: Icons.shopping_basket_outlined, title: 'Panier vide', message: 'Touchez un produit pour l\'ajouter.', tone: TiliTone.neutral)
+                : ListView.separated(
+                    padding: const EdgeInsets.symmetric(vertical: TiliSpace.xs),
+                    itemCount: _cartItems.length,
+                    separatorBuilder: (_, _) => const Divider(indent: TiliSpace.lg, endIndent: TiliSpace.lg),
+                    itemBuilder: (context, index) {
+                      final cartItem = _cartItems[index];
+                      final product = cartItem['product'];
+                      final quantity = cartItem['quantity'] as int;
+                      return Padding(
+                        padding: const EdgeInsets.fromLTRB(TiliSpace.lg, TiliSpace.sm, TiliSpace.xs, TiliSpace.sm),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 32,
+                              height: 32,
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(color: p.surfaceMuted, borderRadius: TiliRadius.all(TiliRadius.sm)),
+                              child: Text('$quantity', style: context.text.labelLarge),
+                            ),
+                            const SizedBox(width: TiliSpace.md),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(product['name'] ?? 'Produit', overflow: TextOverflow.ellipsis, style: context.text.titleSmall),
+                                  Text(formatEuro(_itemPrice(product)), style: context.text.bodySmall?.copyWith(color: p.textSubtle)),
+                                ],
+                              ),
+                            ),
+                            Text(formatEuro(_itemPrice(product) * quantity), style: context.text.titleSmall),
+                            TiliIconButton(tooltip: 'Retirer du panier', onPressed: () => _removeCartItem(index), icon: Icons.close),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+          ),
+          Container(
+            padding: const EdgeInsets.all(TiliSpace.lg + 2),
+            decoration: BoxDecoration(
+              color: p.ink,
+              borderRadius: const BorderRadius.vertical(bottom: Radius.circular(TiliRadius.lg - 1)),
+            ),
+            child: Row(
+              children: [
+                Text('TOTAL TTC', style: context.text.labelSmall?.copyWith(color: p.onInkMuted, letterSpacing: 1.5)),
+                const Spacer(),
+                Text(formatEuro(_cartTotal), style: context.text.headlineMedium?.copyWith(color: p.onInk)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _keypadKey(String label) {
+    final p = context.palette;
+    final (bg, fg) = switch (label) {
+      'X' => (p.dangerTint, p.danger),
+      '=' => (p.accent, p.onInk),
+      _ => (p.surfaceMuted, p.foreground),
+    };
+    return Material(
+      color: bg,
+      borderRadius: TiliRadius.all(TiliRadius.md),
+      child: InkWell(
+        borderRadius: TiliRadius.all(TiliRadius.md),
+        onTap: () => _handleCalculatorButton(label),
+        child: Center(
+          child: label == 'X'
+              ? Icon(Icons.clear_rounded, color: fg, size: TiliSizes.iconLg)
+              : Text(label, style: context.text.headlineSmall?.copyWith(color: fg)),
         ),
       ),
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final spacing = 16.0;
-    final totalSpacing = spacing * 2; // two spacings
-    final availableWidth = screenWidth - totalSpacing;
-    final partWidth = availableWidth / 4;
-    final safeHeight =
-        MediaQuery.of(context).size.height -
-        MediaQuery.of(context).padding.top -
-        MediaQuery.of(context).padding.bottom -
-        kToolbarHeight;
-    return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        automaticallyImplyLeading: false,
-        leading: IconButton(onPressed: _logout, icon: const Icon(Icons.logout)),
-        title: Text('$_storeName - $_userName'),
-        actions: [
-          IconButton(
-            onPressed: _openSettings,
-            icon: const Icon(Icons.settings),
-          ),
-        ],
-      ),
-      body: SafeArea(
-
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(
-              width: partWidth * 2,
-              height: safeHeight,
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                margin: const EdgeInsets.only(left: 16, top: 16, bottom: 16),
-                decoration: BoxDecoration(
-                  color: Colors.grey[200],
-                  borderRadius: BorderRadius.circular(8.0),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (_catalog != null && _catalog!.isNotEmpty)
-                      SizedBox(
-                        height: 60, // Fixed height for the category buttons row
-                        child: SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: Row(
-                            children: [
-                              Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 4.0,
-                                ),
-                                child: ElevatedButton(
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: _selectedCategory == 'Tous'
-                                        ? const Color(0xFFE15554)
-                                        : Colors.grey[300],
-                                    foregroundColor: _selectedCategory == 'Tous'
-                                        ? Colors.white
-                                        : Colors.black,
-                                  ),
-                                  onPressed: () {
-                                    setState(() {
-                                      _selectedCategory = 'Tous';
-                                    });
-                                  },
-                                  child: const Text('TOUS'),
-                                ),
-                              ),
-                              ...(_categories ?? []).map(
-                                (category) => Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 4.0,
-                                  ),
-                                  child: ElevatedButton(
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor:
-                                          category['type'] == _selectedCategory
-                                          ? const Color(0xFFE15554)
-                                          : Colors.grey[300],
-                                      foregroundColor:
-                                          category['type'] == _selectedCategory
-                                          ? Colors.white
-                                          : Colors.black,
-                                    ),
-                                    onPressed: () {
-                                      setState(() {
-                                        _selectedCategory =
-                                            category['type'] ?? 'Tous';
-                                      });
-                                    },
-                                    child: Text(category['type'] ?? 'Unknown'),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    SizedBox(
-                      height: 16,
-                      child: Align(
-                        alignment: Alignment.centerRight,
+  Widget _actionPanel() {
+    final p = context.palette;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(
+          child: TiliCard(
+            padding: const EdgeInsets.all(TiliSpace.md + 2),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: TiliSpace.md, vertical: TiliSpace.sm),
+                  decoration: BoxDecoration(
+                    color: p.surfaceMuted,
+                    borderRadius: TiliRadius.all(TiliRadius.md),
+                    border: Border.all(color: p.borderSubtle),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
                         child: Text(
-                          _currentCatalogName ?? '',
-                          style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                          _selectedProduct?['name'] ?? 'Quantité',
+                          overflow: TextOverflow.ellipsis,
+                          style: context.text.bodySmall?.copyWith(color: p.textSubtle),
                         ),
                       ),
-                    ),
-                    Expanded(
-                      child: Container(
-                        // Placeholder for the catalog items list
-                        color: Colors.grey[200],
-                        child: _isLoadingCatalog
-                            ? const Center(child: CircularProgressIndicator())
-                            : _catalog != null && _catalog!.isNotEmpty
-                            ? _visibleItems.isEmpty
-                                ? const Center(child: Text('Aucun produit'))
-                                : ListView.builder(
-                                    padding: const EdgeInsets.all(8),
-                                    itemCount: _visibleItems.length,
-                                    itemBuilder: (context, index) {
-                                      final item = _visibleItems[index];
-                                      return Card(
-                                        child: ListTile(
-                                          onTap: () {
-                                            setState(() {
-                                              _selectedProduct = item;
-                                            });
-                                            _addToCart(item);
-                                          },
-                                          title: Text(item['name'] ?? 'Produit'),
-                                          subtitle: Text(
-                                            'Catégorie: ${item['categorie']?['type'] ?? 'Inconnue'}',
-                                          ),
-                                          trailing: Text(
-                                            formatEuro(_itemPrice(item)),
-                                            style: const TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                        ),
-                                      );
-                                    },
-                                  )
-                            : Center(
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Text('Aucun catalogue pour ce commerce'),
-                                    const SizedBox(height: 8),
-                                    TextButton.icon(
-                                      onPressed: _openSettings,
-                                      icon: const Icon(Icons.settings),
-                                      label: const Text('Créer un catalogue dans les paramètres'),
-                                    ),
-                                  ],
-                                ),
-                              ),
+                      Text(
+                        _quantityInput.isEmpty ? '0' : '×$_quantityInput',
+                        style: context.text.headlineSmall?.copyWith(color: _quantityInput.isEmpty ? p.border : p.foreground),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
+                const SizedBox(height: TiliSpace.md),
+                Expanded(
+                  child: LayoutBuilder(
+                    builder: (context, c) {
+                      const gap = TiliSpace.sm;
+                      final keyW = (c.maxWidth - gap * 2) / 3;
+                      final keyH = (c.maxHeight - gap * 3) / 4;
+                      return Wrap(
+                        spacing: gap,
+                        runSpacing: gap,
+                        children: [for (final k in _keypad) SizedBox(width: keyW, height: keyH, child: _keypadKey(k))],
+                      );
+                    },
+                  ),
+                ),
+              ],
             ),
-            SizedBox(width: spacing),
-            SizedBox(
-              width: partWidth * 2,
-              height: safeHeight,
-              child: Row(
-                children: [
-                  SizedBox(
-                    width: partWidth - spacing / 2,
-                    height: safeHeight,
-                    child: Container(
-                      height: double.infinity,
-                      child: Column(
-                        children: [
-                          Expanded(
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                border: Border.all(
-                                  color: const Color(0xFF7768AE),
-                                  width: 1,
-                                ),
-                                borderRadius: BorderRadius.circular(8.0),
-                              ),
-                              padding: const EdgeInsets.all(8.0),
-                              margin: const EdgeInsets.only(top: 16),
-                              child: Column(
-                                children: [
-                                  SizedBox(
-                                    height: 40,
-                                    child: Row(
-                                      mainAxisAlignment: MainAxisAlignment.end,
-                                      children: [
-                                        IconButton(
-                                          onPressed: _cartItems.isEmpty ? null : _clearCart,
-                                          icon: const Icon(Icons.delete_outline),
-                                          tooltip: 'Vider le panier',
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  Expanded(
-                                    child: _cartItems.isEmpty
-                                        ? const Center(child: Text('Aucun produit sélectionné'))
-                                        : ListView.separated(
-                                            itemCount: _cartItems.length,
-                                            separatorBuilder: (_, __) => const Divider(),
-                                            itemBuilder: (context, index) {
-                                              final cartItem = _cartItems[index];
-                                              final product = cartItem['product'];
-                                              final quantity = cartItem['quantity'] as int;
-                                              return ListTile(
-                                                dense: true,
-                                                title: Text(product['name'] ?? 'Produit'),
-                                                subtitle: Text('x$quantity'),
-                                                trailing: Row(
-                                                  mainAxisSize: MainAxisSize.min,
-                                                  children: [
-                                                    Text(
-                                                      '${(_itemPrice(product) * quantity).toStringAsFixed(2)} €',
-                                                    ),
-                                                    IconButton(
-                                                      onPressed: () => _removeCartItem(index),
-                                                      icon: const Icon(Icons.delete_outline),
-                                                      tooltip: 'Retirer du panier',
-                                                    ),
-                                                  ],
-                                                ),
-                                              );
-                                            },
-                                          ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                const Text(
-                                  'Total',
-                                  style: TextStyle(fontWeight: FontWeight.bold),
-                                ),
-                                Text(
-                                  '${_cartTotal.toStringAsFixed(2)} €',
-                                  style: const TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  Container(
-                    margin: EdgeInsets.only(left: spacing),
-                    child: SizedBox(
-                      width: partWidth - spacing / 2,
-                      height: safeHeight - 8,
-                      child: Column(
-                        children: [
-                          Expanded(
-                            child: Container(
-                              color: Colors.white,
-                              padding: const EdgeInsets.all(8.0),
-                              margin: const EdgeInsets.only(right: 16, top: 16),
-                              child: Column(
-                                children: [
-                                  SizedBox(
-                                    height: 24,
-                                    child: null
-                                  ),
-                                  Expanded(
-                                    child: SingleChildScrollView(
-                                      child: Column(
-                                        children: [
-                                          Row(
-                                            children: [
-                                              _calcButton('1'),
-                                              const SizedBox(width: 4),
-                                              _calcButton('2'),
-                                              const SizedBox(width: 4),
-                                              _calcButton('3'),
-                                            ],
-                                          ),
-                                          const SizedBox(height: 12),
-                                          Row(
-                                            children: [
-                                              _calcButton('4'),
-                                              const SizedBox(width: 4),
-                                              _calcButton('5'),
-                                              const SizedBox(width: 4),
-                                              _calcButton('6'),
-                                            ],
-                                          ),
-                                          const SizedBox(height: 12),
-                                          Row(
-                                            children: [
-                                              _calcButton('7'),
-                                              const SizedBox(width: 4),
-                                              _calcButton('8'),
-                                              const SizedBox(width: 4),
-                                              _calcButton('9'),
-                                            ],
-                                          ),
-                                          const SizedBox(height: 12),
-                                          Row(
-                                            children: [
-                                              _calcButton('X'),
-                                              const SizedBox(width: 4),
-                                              _calcButton('0'),
-                                              const SizedBox(width: 4),
-                                              _calcButton('='),
-                                            ],
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          SizedBox(height: spacing),
-                          SizedBox(
-                            height: 248,
-                            child: Container(
-                              width: partWidth - spacing / 2,
-                              padding: const EdgeInsets.all(12),
-                              margin: const EdgeInsets.only(
-                                right: 16,
-                                bottom: 16,
-                              ),
-                              color: Colors.white,
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  SizedBox(
-                                    width: double.infinity,
-                                    height: 56,
-                                    child: ElevatedButton(
-                                      onPressed: () {},
-                                      child: const Text('Carte'),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  SizedBox(
-                                    width: double.infinity,
-                                    height: 56,
-                                    child: ElevatedButton(
-                                      onPressed: () {},
-                                      child: const Text('Espèces'),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  SizedBox(
-                                    width: double.infinity,
-                                    height: 56,
-                                    child: ElevatedButton(
-                                      onPressed: () {},
-                                      child: const Text('Paiement multiple'),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+          ),
+        ),
+        const SizedBox(height: TiliSpace.md),
+        TiliButton(label: 'Carte', icon: Icons.credit_card, size: TiliButtonSize.lg, expand: true, onPressed: () {}),
+        const SizedBox(height: TiliSpace.sm),
+        Row(
+          children: [
+            Expanded(
+              child: TiliButton(label: 'Espèces', icon: Icons.payments_outlined, variant: TiliButtonVariant.outline, size: TiliButtonSize.lg, onPressed: () {}),
+            ),
+            const SizedBox(width: TiliSpace.sm),
+            Expanded(
+              child: TiliButton(label: 'Multiple', icon: Icons.call_split, variant: TiliButtonVariant.outline, size: TiliButtonSize.lg, onPressed: () {}),
             ),
           ],
+        ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: _appBar(),
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(TiliSpace.lg),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(flex: 5, child: _catalogPanel()),
+              const SizedBox(width: TiliSpace.lg),
+              Expanded(flex: 3, child: _cartPanel()),
+              const SizedBox(width: TiliSpace.lg),
+              Expanded(flex: 3, child: _actionPanel()),
+            ],
+          ),
         ),
       ),
     );
@@ -695,34 +635,16 @@ class _SettingsPinDialogState extends State<_SettingsPinDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('PIN administrateur'),
-      content: SizedBox(
-        width: 280,
-        child: TextField(
-          controller: _pinController,
-          autofocus: true,
-          keyboardType: TextInputType.number,
-          textAlign: TextAlign.center,
-          maxLength: 6,
-          obscureText: true,
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-          decoration: const InputDecoration(
-            hintText: 'Entrez le PIN à 6 chiffres',
-            border: OutlineInputBorder(),
-          ),
-        ),
-      ),
+    return TiliDialog(
+      title: 'PIN administrateur',
+      subtitle: 'Réservé aux administrateurs du commerce',
+      icon: Icons.admin_panel_settings_outlined,
+      width: 400,
       actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Annuler'),
-        ),
-        TextButton(
-          onPressed: _submitPin,
-          child: const Text('Valider'),
-        ),
+        TiliButton(label: 'Annuler', variant: TiliButtonVariant.outline, onPressed: () => Navigator.of(context).pop()),
+        TiliButton(label: 'Valider', onPressed: _submitPin),
       ],
+      child: PinField(controller: _pinController, onSubmitted: (_) => _submitPin()),
     );
   }
 }

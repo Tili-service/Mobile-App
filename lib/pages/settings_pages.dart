@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/profile_service.dart';
+import '../theme/theme.dart';
+import '../widgets/widgets.dart';
 import 'settings/catalog_section.dart';
 import 'settings/profiles_section.dart';
 
@@ -34,33 +36,52 @@ class SettingsPage extends StatefulWidget {
 class _SettingsPageState extends State<SettingsPage> {
   int _selectedIndex = 0;
 
-  static const _menu = <(String, IconData)>[
-    ('Boutique', Icons.store),
-    ('Analytiques', Icons.bar_chart),
-    ('Profils', Icons.people),
-    ('Catalogue', Icons.inventory_2),
-    ('TPE', Icons.point_of_sale),
-    ('Informations', Icons.info_outline),
+  static const _menu = [
+    SideNavItem('Boutique', Icons.storefront_outlined),
+    SideNavItem('Analytiques', Icons.bar_chart_rounded),
+    SideNavItem('Profils', Icons.people_outline),
+    SideNavItem('Catalogue', Icons.inventory_2_outlined),
+    SideNavItem('TPE', Icons.point_of_sale_outlined),
+    SideNavItem('Informations', Icons.info_outline),
   ];
 
   Widget _infoRow(IconData icon, String label, String value) {
-    return ListTile(
-      leading: Icon(icon),
-      title: Text(label, style: const TextStyle(color: Colors.grey)),
-      subtitle: Text(value, style: const TextStyle(fontSize: 18, color: Colors.black87)),
+    final p = context.palette;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: TiliSpace.sm),
+      child: Row(
+        children: [
+          IconTile(icon: icon, size: 36),
+          const SizedBox(width: TiliSpace.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, style: context.text.bodySmall?.copyWith(color: p.textSubtle)),
+                Text(value, style: context.text.titleSmall, overflow: TextOverflow.ellipsis),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
   Widget _placeholder(String title, String text) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
+    return EmptyState(icon: Icons.construction_outlined, title: title, message: text, tone: TiliTone.neutral);
+  }
+
+  Widget _shortcut(int index) {
+    final item = _menu[index];
+    return TiliCard(
+      onTap: () => setState(() => _selectedIndex = index),
+      padding: const EdgeInsets.all(TiliSpace.lg),
+      child: Row(
         children: [
-          const Icon(Icons.construction, size: 48, color: Colors.grey),
-          const SizedBox(height: 12),
-          Text(title, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 4),
-          Text(text, style: const TextStyle(color: Colors.grey)),
+          IconTile(icon: item.icon, tone: TiliTone.accent),
+          const SizedBox(width: TiliSpace.md),
+          Expanded(child: Text(item.label, style: context.text.titleSmall)),
+          Icon(Icons.chevron_right, color: context.palette.border),
         ],
       ),
     );
@@ -71,39 +92,38 @@ class _SettingsPageState extends State<SettingsPage> {
     final level = widget.adminProfile['level_access'] as int?;
     return ListView(
       children: [
-        const Text('Boutique', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 12),
-        Card(
-          child: Column(
-            children: [
-              _infoRow(Icons.business, 'Nom du commerce', store['name']?.toString() ?? 'N/A'),
-              _infoRow(Icons.confirmation_number, 'Licence', widget.license['licence_id']?.toString() ?? 'N/A'),
-              _infoRow(Icons.admin_panel_settings, 'Connecté en tant que',
-                  '${widget.adminProfile['name'] ?? 'Admin'} (${ProfileService.levelNames[level] ?? 'Inconnu'})'),
-            ],
-          ),
-        ),
-        const SizedBox(height: 12),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
+        const PageHeader(title: 'Boutique', subtitle: 'Vue d\'ensemble de votre commerce'),
+        const SizedBox(height: TiliSpace.xl),
+        TiliSection(
+          title: 'Informations',
+          icon: Icons.storefront_outlined,
           children: [
-            for (var i = 1; i < _menu.length; i++)
-              ActionChip(
-                avatar: Icon(_menu[i].$2, size: 18),
-                label: Text(_menu[i].$1),
-                onPressed: () => setState(() => _selectedIndex = i),
-              ),
+            _infoRow(Icons.business_outlined, 'Nom du commerce', store['name']?.toString() ?? 'N/A'),
+            _infoRow(Icons.confirmation_number_outlined, 'Licence', widget.license['licence_id']?.toString() ?? 'N/A'),
+            _infoRow(Icons.admin_panel_settings_outlined, 'Connecté en tant que',
+                '${widget.adminProfile['name'] ?? 'Admin'} (${ProfileService.levelNames[level] ?? 'Inconnu'})'),
           ],
         ),
-        const SizedBox(height: 24),
-        const Text("Filtres d'accessibilité", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 12),
-        const Card(
-          child: Padding(
-            padding: EdgeInsets.all(16),
-            child: Text("Options d'accessibilité à venir...", style: TextStyle(fontSize: 16)),
-          ),
+        const SizedBox(height: TiliSpace.xl),
+        const SectionLabel('Accès rapide'),
+        const SizedBox(height: TiliSpace.md),
+        LayoutBuilder(
+          builder: (context, c) {
+            const gap = TiliSpace.md;
+            final cols = (c.maxWidth / 260).floor().clamp(1, 3);
+            final w = (c.maxWidth - gap * (cols - 1)) / cols;
+            return Wrap(
+              spacing: gap,
+              runSpacing: gap,
+              children: [for (var i = 1; i < _menu.length; i++) SizedBox(width: w, child: _shortcut(i))],
+            );
+          },
+        ),
+        const SizedBox(height: TiliSpace.xl),
+        const TiliSection(
+          title: "Filtres d'accessibilité",
+          icon: Icons.accessibility_new_outlined,
+          children: [Notice(message: "Options d'accessibilité à venir…", tone: TiliTone.info)],
         ),
       ],
     );
@@ -130,29 +150,66 @@ class _SettingsPageState extends State<SettingsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final p = context.palette;
+    final adminName = widget.adminProfile['name']?.toString() ?? 'Admin';
     return Scaffold(
-      appBar: AppBar(
-        title: Text('Paramètres — ${widget.license['store']?['name'] ?? ''}'),
-      ),
       body: Row(
         children: [
-          SizedBox(
-            width: 200,
-            child: ListView.builder(
-              itemCount: _menu.length,
-              itemBuilder: (context, index) => ListTile(
-                leading: Icon(_menu[index].$2),
-                title: Text(_menu[index].$1),
-                selected: index == _selectedIndex,
-                onTap: () => setState(() => _selectedIndex = index),
-              ),
+          SideNav(
+            items: _menu,
+            selected: _selectedIndex,
+            onSelect: (i) => setState(() => _selectedIndex = i),
+            footer: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Avatar(name: adminName, size: 34),
+                    const SizedBox(width: TiliSpace.sm + 2),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(adminName, overflow: TextOverflow.ellipsis, style: context.text.labelLarge?.copyWith(color: p.onInk)),
+                          Text(
+                            ProfileService.levelNames[widget.adminProfile['level_access']] ?? '',
+                            style: context.text.bodySmall?.copyWith(color: p.onInkMuted),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: TiliSpace.md),
+                TiliButton(
+                  label: 'Retour à la caisse',
+                  icon: Icons.arrow_back,
+                  variant: TiliButtonVariant.accent,
+                  size: TiliButtonSize.sm,
+                  expand: true,
+                  onPressed: () => Navigator.of(context).maybePop(),
+                ),
+              ],
             ),
           ),
-          const VerticalDivider(width: 1),
           Expanded(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: _buildContent(),
+            child: Column(
+              children: [
+                TiliAppBar(
+                  showBack: false,
+                  breadcrumb: 'Paramètres',
+                  title: widget.license['store']?['name']?.toString() ?? '',
+                  actions: [
+                    FullscreenButton(isFullScreen: widget.isFullScreen, onToggle: widget.onToggleFullScreen),
+                  ],
+                ),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.all(TiliSpace.page),
+                    child: _buildContent(),
+                  ),
+                ),
+              ],
             ),
           ),
         ],

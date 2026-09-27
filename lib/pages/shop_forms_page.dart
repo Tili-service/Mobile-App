@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import '../services/token_service.dart';
 import '../services/store_service.dart';
-import '../widgets/dialogs.dart';
+import '../theme/theme.dart';
+import '../widgets/widgets.dart';
 import 'session_page.dart';
 
 /* Creates the shop linked to an active licence, then opens its PIN screen. */
@@ -25,6 +26,7 @@ class _ShopFormsPageState extends State<ShopFormsPage> {
   final nameController = TextEditingController();
   final siretController = TextEditingController();
   final tvaController = TextEditingController();
+  bool _loading = false;
 
   @override
   void dispose() {
@@ -38,13 +40,12 @@ class _ShopFormsPageState extends State<ShopFormsPage> {
     if (nameController.text.trim().isEmpty ||
         siretController.text.trim().isEmpty ||
         tvaController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Nom, SIRET et numéro de TVA sont requis')),
-      );
+      showMessage(context, 'Nom, SIRET et numéro de TVA sont requis', error: true);
       return;
     }
     final token = await TokenService.getToken(TokenType.shop);
     if (token == null) return;
+    setState(() => _loading = true);
     final Map<String, dynamic> store;
     try {
       store = await StoreService.createStore(
@@ -57,6 +58,8 @@ class _ShopFormsPageState extends State<ShopFormsPage> {
     } catch (e) {
       if (mounted) showMessage(context, e.toString(), error: true);
       return;
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
     final storeId = store['store_id']?.toString();
     if (storeId != null) {
@@ -77,70 +80,56 @@ class _ShopFormsPageState extends State<ShopFormsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('NOUVEAU COMMERCE'),
-      ),
-      body: Center(
-        child: SingleChildScrollView(
+      appBar: const TiliAppBar(breadcrumb: 'Mes commerces', title: 'Nouveau commerce'),
+      floatingActionButton: FullscreenButton(isFullScreen: widget.isFullScreen, onToggle: widget.onToggleFullScreen),
+      body: SingleChildScrollView(
+        child: PageBody(
+          maxWidth: TiliSizes.contentMaxWidth,
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Image.asset(
-                'assets/tiliLogo.png',
-                height: 150,
+              const PageHeader(
+                title: 'Associer un commerce',
+                subtitle: 'Renseignez les informations légales de votre établissement.',
               ),
-              const SizedBox(height: 25),
-              SizedBox(
-                width: 500,
-                child: TextField(
-                  controller: nameController,
-                  decoration: const InputDecoration(
-                    labelText: 'NOM DU COMMERCE',
-                    border: OutlineInputBorder(),
+              const SizedBox(height: TiliSpace.xl),
+              TiliSection(
+                title: 'Informations du commerce',
+                icon: Icons.storefront_outlined,
+                children: [
+                  TiliField(controller: nameController, label: 'Nom du commerce', hint: 'Ma boutique', icon: Icons.store_outlined),
+                  const SizedBox(height: TiliSpace.lg),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TiliField(
+                          controller: siretController,
+                          label: 'Numéro SIRET',
+                          hint: '12345678901234',
+                          icon: Icons.badge_outlined,
+                          keyboardType: TextInputType.number,
+                        ),
+                      ),
+                      const SizedBox(width: TiliSpace.md),
+                      Expanded(
+                        child: TiliField(
+                          controller: tvaController,
+                          label: 'Numéro de TVA',
+                          hint: 'FR12345678901',
+                          icon: Icons.receipt_long_outlined,
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              SizedBox(
-                width: 500,
-                child: TextField(
-                  controller: siretController,
-                  decoration: const InputDecoration(
-                    labelText: 'NUMÉROS SIRET (ex: 12345678901234)',
-                    border: OutlineInputBorder(),
+                  const SizedBox(height: TiliSpace.xl),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TiliButton(label: 'Créer le commerce', icon: Icons.check, loading: _loading, onPressed: _submit),
                   ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              SizedBox(
-                width: 500,
-                child: TextField(
-                  controller: tvaController,
-                  decoration: const InputDecoration(
-                    labelText: 'NUMÉROS TVA (ex: FR12345678901)',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-              SizedBox(
-                width: 250,
-                height: 45,
-                child: ElevatedButton(
-                  onPressed: _submit,
-                  child: const Text('CONFIRMER'),
-                ),
+                ],
               ),
             ],
           ),
-        ),
-      ),
-      floatingActionButton: IconButton(
-        onPressed: widget.onToggleFullScreen,
-        icon: Icon(
-          widget.isFullScreen
-              ? Icons.fullscreen_exit
-              : Icons.fullscreen,
         ),
       ),
     );
