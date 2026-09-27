@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
 import '../services/token_service.dart';
 import '../services/store_service.dart';
+import '../widgets/dialogs.dart';
 import 'session_page.dart';
 
-/* The ShopFormsPage is a stateful widget that represents the form for
-creating a new store. It includes input fields for the store name, SIRET number,
-and TVA number, as well as a submit button to create the store. The page also
-includes a floating action button to toggle full-screen mode. */
+/* Creates the shop linked to an active licence, then opens its PIN screen. */
 class ShopFormsPage extends StatefulWidget {
   const ShopFormsPage({
     super.key,
@@ -23,16 +21,6 @@ class ShopFormsPage extends StatefulWidget {
   State<ShopFormsPage> createState() => _ShopFormsPageState();
 }
 
-
-
-/* The _ShopFormsPageState class manages the state of the ShopFormsPage widget. It includes
-text controllers for the store name, SIRET number, and TVA number input fields. The
-_submit method handles the submission of the form by retrieving the authentication token,
-calling the StoreService's createStore method with the provided information, and navigating
-to the SessionPage if the store is successfully created. If there is an error during store
-creation, it shows a SnackBar with an error message. The build method constructs the UI of the
-page, including the input fields and the submit button. The floating action button allows the
-user to toggle full-screen mode. */
 class _ShopFormsPageState extends State<ShopFormsPage> {
   final nameController = TextEditingController();
   final siretController = TextEditingController();
@@ -46,14 +34,6 @@ class _ShopFormsPageState extends State<ShopFormsPage> {
     super.dispose();
   }
 
-  /* The _submit method is responsible for handling the form submission when the user
-  taps the "CONFIRMER" button. It retrieves the authentication token from the TokenService
-  and calls the StoreService's createStore method with the token, license ID, store name,
-  SIRET number, and TVA number. If the store is successfully created and a store ID is returned,
-  it saves the store ID as a token and navigates to the SessionPage. If there is an error
-  during store creation, it shows a SnackBar with an error message indicating that there
-  was an issue creating the store. This method ensures that the user can only proceed to
-  the next step if the store is successfully created, providing feedback in case of errors. */
   void _submit() async {
     if (nameController.text.trim().isEmpty ||
         siretController.text.trim().isEmpty ||
@@ -64,34 +44,34 @@ class _ShopFormsPageState extends State<ShopFormsPage> {
       return;
     }
     final token = await TokenService.getToken(TokenType.shop);
-    if (token != null) {
-      final result = await StoreService.createStore(
+    if (token == null) return;
+    final Map<String, dynamic> store;
+    try {
+      store = await StoreService.createStore(
         token,
         widget.license['licence_id'],
         nameController.text.trim(),
         tvaController.text.trim(),
         siretController.text.trim(),
       );
-      if (result != null) {
-        final storeId = result['store_id']?.toString();
-        if (storeId != null) {
-          await TokenService.saveToken(TokenType.license, storeId);
-        }
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(
-            builder: (_) => SessionPage(
-              license: widget.license,
-              isFullScreen: widget.isFullScreen,
-              onToggleFullScreen: widget.onToggleFullScreen,
-            ),
-          ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Erreur lors de la création du commerce')),
-        );
-      }
+    } catch (e) {
+      if (mounted) showMessage(context, e.toString(), error: true);
+      return;
     }
+    final storeId = store['store_id']?.toString();
+    if (storeId != null) {
+      await TokenService.saveToken(TokenType.license, storeId);
+    }
+    if (!mounted) return;
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(
+        builder: (_) => SessionPage(
+          license: {...widget.license, 'store': store},
+          isFullScreen: widget.isFullScreen,
+          onToggleFullScreen: widget.onToggleFullScreen,
+        ),
+      ),
+    );
   }
 
   @override

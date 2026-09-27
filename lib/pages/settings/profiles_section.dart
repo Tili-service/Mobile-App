@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../services/profile_service.dart';
 import '../../widgets/dialogs.dart';
+import '../../widgets/stat_card.dart';
 
 class ProfilesSection extends StatefulWidget {
   const ProfilesSection({
@@ -143,23 +144,6 @@ class _ProfilesSectionState extends State<ProfilesSection> {
     await _run(() => ProfileService.deleteProfile(widget.token, profile['profile_id'].toString()), 'Profil supprimé');
   }
 
-  Widget _stat(String label, int value, Color color) {
-    return Expanded(
-      child: Card(
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('$value', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: color)),
-              Text(label, style: const TextStyle(color: Colors.grey)),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   String _initials(String name) {
     final parts = name.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
     if (parts.isEmpty) return '?';
@@ -221,9 +205,9 @@ class _ProfilesSectionState extends State<ProfilesSection> {
         if (_error != null) Text(_error!, style: const TextStyle(color: Colors.red)),
         Row(
           children: [
-            _stat('Total', profiles.length, Colors.black87),
-            _stat('Actifs', activeCount, Colors.green),
-            _stat('Inactifs', profiles.length - activeCount, Colors.grey),
+            StatCard(label: 'Total', value: profiles.length),
+            StatCard(label: 'Actifs', value: activeCount, color: Colors.green),
+            StatCard(label: 'Inactifs', value: profiles.length - activeCount, color: Colors.grey),
           ],
         ),
         const SizedBox(height: 8),

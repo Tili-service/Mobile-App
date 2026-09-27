@@ -107,9 +107,7 @@ class _AccountPageState extends State<AccountPage> {
     if (!confirmed || !mounted) return;
     try {
       await AccountService.deleteAccount(_token!);
-      await TokenService.deleteToken(TokenType.shop);
-      await TokenService.deleteToken(TokenType.user);
-      await TokenService.deleteToken(TokenType.license);
+      await TokenService.clearAll();
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
       if (mounted) showMessage(context, e.toString(), error: true);

@@ -118,11 +118,13 @@ class _CatalogSectionState extends State<CatalogSection> {
       _catalogs?.cast<Map<String, dynamic>?>().firstWhere((c) => c?['catalog_id'].toString() == _catalogId, orElse: () => null);
 
   Future<void> _createCatalog({String initialName = ''}) async {
-    final name = await textInputDialog(context,
-        title: 'Nouveau catalogue', label: 'Nom du catalogue', initialValue: initialName, confirmLabel: 'Créer');
-    if (name == null) return;
+    final result = await showDialog<(String, String)>(
+      context: context,
+      builder: (_) => _CatalogFormDialog(title: 'Nouveau catalogue', initialName: initialName, confirmLabel: 'Créer'),
+    );
+    if (result == null) return;
     await _run(() async {
-      final created = await CatalogService.createCatalog(_token, widget.storeId, name);
+      final created = await CatalogService.createCatalog(_token, widget.storeId, result.$1, result.$2);
       _catalogId = created['catalog_id']?.toString();
     }, 'Catalogue créé', reloadCatalogs: true);
   }
@@ -136,14 +138,23 @@ class _CatalogSectionState extends State<CatalogSection> {
     showMessage(context, '${_currentCatalog?['name'] ?? 'Catalogue'} est maintenant le catalogue actif en caisse');
   }
 
-  Future<void> _renameCatalog() async {
+  Future<void> _editCatalog() async {
     final current = _currentCatalog;
     if (current == null) return;
-    final name = await textInputDialog(context,
-        title: 'Renommer le catalogue', label: 'Nom du catalogue', initialValue: current['name']?.toString() ?? '');
-    if (name == null) return;
-    await _run(() => CatalogService.renameCatalog(_token, widget.storeId, _catalogId!, name), 'Catalogue modifié',
-        reloadCatalogs: true);
+    final result = await showDialog<(String, String)>(
+      context: context,
+      builder: (_) => _CatalogFormDialog(
+        title: 'Modifier le catalogue',
+        initialName: current['name']?.toString() ?? '',
+        initialDescription: current['description']?.toString() ?? '',
+      ),
+    );
+    if (result == null) return;
+    await _run(
+      () => CatalogService.updateCatalog(_token, widget.storeId, _catalogId!, result.$1, result.$2),
+      'Catalogue modifié',
+      reloadCatalogs: true,
+    );
   }
 
   Future<void> _deleteCatalog() async {
@@ -333,7 +344,7 @@ class _CatalogSectionState extends State<CatalogSection> {
                 label: const Text('Définir comme actif'),
               ),
             IconButton(tooltip: 'Nouveau catalogue', onPressed: _createCatalog, icon: const Icon(Icons.create_new_folder)),
-            IconButton(tooltip: 'Renommer', onPressed: _renameCatalog, icon: const Icon(Icons.edit)),
+            IconButton(tooltip: 'Modifier', onPressed: _editCatalog, icon: const Icon(Icons.edit)),
             IconButton(
                 tooltip: 'Supprimer', onPressed: _deleteCatalog, icon: const Icon(Icons.delete_outline), color: Colors.red),
           ],
@@ -576,6 +587,11 @@ class _CatalogSectionState extends State<CatalogSection> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _catalogBar(),
+        if ((_currentCatalog?['description']?.toString() ?? '').isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
+            child: Text(_currentCatalog!['description'].toString(), style: TextStyle(color: Colors.grey[700])),
+          ),
         if (_error != null) Text(_error!, style: const TextStyle(color: Colors.red)),
         const SizedBox(height: 8),
         Row(
@@ -734,6 +750,71 @@ class _ItemFormDialogState extends State<_ItemFormDialog> {
       actions: [
         TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Annuler')),
         FilledButton(onPressed: _submit, child: const Text('Enregistrer')),
+      ],
+    );
+  }
+}
+
+class _CatalogFormDialog extends StatefulWidget {
+  const _CatalogFormDialog({
+    required this.title,
+    this.initialName = '',
+    this.initialDescription = '',
+    this.confirmLabel = 'Enregistrer',
+  });
+
+  final String title;
+  final String initialName;
+  final String initialDescription;
+  final String confirmLabel;
+
+  @override
+  State<_CatalogFormDialog> createState() => _CatalogFormDialogState();
+}
+
+class _CatalogFormDialogState extends State<_CatalogFormDialog> {
+  late final TextEditingController _nameController = TextEditingController(text: widget.initialName);
+  late final TextEditingController _descriptionController = TextEditingController(text: widget.initialDescription);
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _descriptionController.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final name = _nameController.text.trim();
+    if (name.isEmpty) return;
+    Navigator.of(context).pop((name, _descriptionController.text.trim()));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.title),
+      content: SizedBox(
+        width: 420,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: _nameController,
+              autofocus: true,
+              decoration: const InputDecoration(labelText: 'Nom du catalogue', border: OutlineInputBorder()),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _descriptionController,
+              maxLines: 3,
+              decoration: const InputDecoration(labelText: 'Description (optionnelle)', border: OutlineInputBorder()),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Annuler')),
+        FilledButton(onPressed: _submit, child: Text(widget.confirmLabel)),
       ],
     );
   }

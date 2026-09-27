@@ -15,23 +15,34 @@ class CatalogService {
     return ApiClient.asList(data);
   }
 
-  static Future<Map<String, dynamic>> createCatalog(String token, String storeId, String name) async {
+  static Future<Map<String, dynamic>> createCatalog(
+    String token,
+    String storeId,
+    String name,
+    String description,
+  ) async {
     final data = await ApiClient.request(
       'POST',
       '/catalog/store/$storeId',
       token: token,
-      body: {'name': name, 'description': ''},
+      body: {'name': name, 'description': description},
       errorMessage: 'Impossible de créer le catalogue',
     );
     return (data as Map).cast<String, dynamic>();
   }
 
-  static Future<void> renameCatalog(String token, String storeId, String catalogId, String name) async {
+  static Future<void> updateCatalog(
+    String token,
+    String storeId,
+    String catalogId,
+    String name,
+    String description,
+  ) async {
     await ApiClient.request(
       'PUT',
       '/catalog/store/$storeId/$catalogId',
       token: token,
-      body: {'name': name},
+      body: {'name': name, 'description': description},
       errorMessage: 'Impossible de modifier le catalogue',
     );
   }

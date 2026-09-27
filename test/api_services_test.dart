@@ -3,10 +3,12 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:tili/services/account_service.dart';
 import 'package:tili/services/api_client.dart';
 import 'package:tili/services/api_exception.dart';
 import 'package:tili/services/catalog_service.dart';
 import 'package:tili/services/profile_service.dart';
+import 'package:tili/services/store_service.dart';
 import 'package:tili/utils/pricing.dart';
 
 void main() {
@@ -75,6 +77,23 @@ void main() {
     test('resetPin returns the new pin', () async {
       respond(200, {'pin': '123456'});
       expect(await ProfileService.resetPin('tok', 'p1', 's1'), '123456');
+    });
+  });
+
+  group('AccountService', () {
+    test('login returns the token', () async {
+      respond(200, {'token': 'jwt'});
+      expect(await AccountService.login('a@b.c', 'pw'), 'jwt');
+      expect(jsonDecode(lastRequest.body), {'email': 'a@b.c', 'password': 'pw'});
+    });
+  });
+
+  group('StoreService', () {
+    test('createStore posts licence and shop info', () async {
+      respond(201, {'store_id': 's1', 'name': 'Shop'});
+      final store = await StoreService.createStore('tok', 'lic', 'Shop', 'FR1', '123');
+      expect(store['store_id'], 's1');
+      expect(jsonDecode(lastRequest.body), {'licence_id': 'lic', 'name': 'Shop', 'numero_tva': 'FR1', 'siret': '123'});
     });
   });
 

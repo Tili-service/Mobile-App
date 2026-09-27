@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import '../services/license_service.dart';
 import '../services/token_service.dart';
 import '../widgets/dialogs.dart';
+import '../widgets/stat_card.dart';
 import 'account_page.dart';
 import 'credentials_page.dart';
 import 'session_page.dart';
@@ -97,9 +98,7 @@ class _LicensesPageState extends State<LicensesPage> {
   }
 
   Future<void> _logout() async {
-    await TokenService.deleteToken(TokenType.shop);
-    await TokenService.deleteToken(TokenType.user);
-    await TokenService.deleteToken(TokenType.license);
+    await TokenService.clearAll();
     if (mounted) _goToLogin();
   }
 
@@ -181,29 +180,6 @@ class _LicensesPageState extends State<LicensesPage> {
   }
 
   String _shortId(String id) => id.length > 8 ? '${id.substring(0, 8).toUpperCase()}…' : id.toUpperCase();
-
-  Widget _stat(String label, int value, IconData icon, Color color) {
-    return Expanded(
-      child: Card(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              Icon(icon, color: color),
-              const SizedBox(width: 12),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('$value', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-                  Text(label, style: const TextStyle(color: Colors.grey)),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 
   Widget _statusChip(_LicenseStatus status) {
     final (label, color) = switch (status) {
@@ -320,10 +296,14 @@ class _LicensesPageState extends State<LicensesPage> {
                   ] else ...[
                     Row(
                       children: [
-                        _stat('Total', licenses.length, Icons.credit_card, Colors.grey),
-                        _stat('Actives', licenses.where((l) => _statusOf(l) == _LicenseStatus.active).length,
-                            Icons.check_circle, Colors.green),
-                        _stat('Associées', licenses.where(_hasStore).length, Icons.store, Colors.orange),
+                        StatCard(label: 'Total', value: licenses.length, icon: Icons.credit_card, color: Colors.grey),
+                        StatCard(
+                          label: 'Actives',
+                          value: licenses.where((l) => _statusOf(l) == _LicenseStatus.active).length,
+                          icon: Icons.check_circle,
+                          color: Colors.green,
+                        ),
+                        StatCard(label: 'Associées', value: licenses.where(_hasStore).length, icon: Icons.store, color: Colors.orange),
                       ],
                     ),
                     const SizedBox(height: 8),

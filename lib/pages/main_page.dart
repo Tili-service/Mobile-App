@@ -2,16 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'session_page.dart';
 import '../services/token_service.dart';
-import '../services/auth_service.dart';
+import '../services/catalog_service.dart';
 import 'package:jwt_decoder/jwt_decoder.dart';
 import '../services/active_catalog_service.dart';
 import '../services/profile_service.dart';
 import '../utils/pricing.dart';
 import 'settings_pages.dart';
 
-/* This widget represents the main page of the application after the user has
-logged in. It displays a category bar, sorting options, and a list of items with
-quantity steppers. */
+/* POS screen of the logged-in cashier: products of the active catalogue
+(filterable by category), cart with quantity keypad, payment buttons, and
+the admin PIN gate to the settings. */
 class MainPage extends StatefulWidget {
   const MainPage({
     super.key,
@@ -57,7 +57,7 @@ class _MainPageState extends State<MainPage> {
           _userName = decodedToken['name'] ?? 'Utilisateur';
         });
       } catch (e) {
-        print('Error decoding user token: $e');
+        debugPrint('Error decoding user token: $e');
       }
     }
     setState(() {
@@ -68,36 +68,33 @@ class _MainPageState extends State<MainPage> {
   Future<void> _loadCatalog() async {
     final token = await TokenService.getToken(TokenType.user);
     final storeId = await TokenService.getToken(TokenType.license);
-    if (token != null && storeId != null) {
-      final catalog = await AuthService.getCatalog(token, storeId);
+    if (token == null || storeId == null) {
+      setState(() => _isLoadingCatalog = false);
+      return;
+    }
+    try {
+      final catalog = await CatalogService.getCatalogs(token, storeId);
       final activeCatalogId = await ActiveCatalogService.get(storeId);
-      final catalogIds = (catalog ?? []).map((c) => c['catalog_id']?.toString()).toList();
+      final catalogIds = catalog.map((c) => c['catalog_id']?.toString()).toList();
       final catalogId = catalogIds.contains(activeCatalogId)
           ? activeCatalogId
           : (catalogIds.isEmpty ? null : catalogIds.first);
-      if (!mounted) return;
-        final categories = catalogId == null
+      final categories = catalogId == null
           ? <dynamic>[]
-          : await AuthService.getCategories(token, catalogId) ?? [];
-        final items = await AuthService.getItems(token) ?? [];
-        final catalogCategoryIds = categories
-          .map((category) => category['categorie_id']?.toString())
-          .whereType<String>()
-          .toSet();
+          : await CatalogService.getCategories(token, catalogId);
+      final items = await CatalogService.getCatalogItems(token, categories);
+      if (!mounted) return;
       setState(() {
         if (catalogId != _currentCatalogId) _selectedCategory = 'Tous';
         _catalog = catalog;
-        _isLoadingCatalog = false;
         _categories = categories;
-        _items = items
-          .where((item) => catalogCategoryIds.contains(item['categorie_id']?.toString()))
-          .toList();
+        _items = items;
         _currentCatalogId = catalogId;
       });
-    } else {
-      setState(() {
-        _isLoadingCatalog = false;
-      });
+    } catch (e) {
+      if (mounted) _showSnackBar(e.toString());
+    } finally {
+      if (mounted) setState(() => _isLoadingCatalog = false);
     }
   }
 
@@ -322,10 +319,6 @@ class _MainPageState extends State<MainPage> {
                 margin: const EdgeInsets.only(left: 16, top: 16, bottom: 16),
                 decoration: BoxDecoration(
                   color: Colors.grey[200],
-                  // border: Border.all(
-                  //   color: const Color(0xFF7768AE),
-                  //   width: 5,
-                  // ),
                   borderRadius: BorderRadius.circular(8.0),
                 ),
                 child: Column(

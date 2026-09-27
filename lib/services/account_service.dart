@@ -11,6 +11,16 @@ class AccountService {
     );
   }
 
+  static Future<String> login(String email, String password) async {
+    final data = await ApiClient.request(
+      'POST',
+      '/account/login',
+      body: {'email': email, 'password': password},
+      errorMessage: 'Échec de la connexion. Vérifiez vos identifiants.',
+    );
+    return (data as Map)['token'].toString();
+  }
+
   static Future<Map<String, dynamic>> getAccount(String token) async {
     final data = await ApiClient.request(
       'GET',
