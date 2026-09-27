@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../services/license_service.dart';
 import '../services/token_service.dart';
-import '../widgets/dialogs.dart';
-import '../widgets/stat_card.dart';
+import '../theme/theme.dart';
+import '../widgets/widgets.dart';
 import 'account_page.dart';
 import 'credentials_page.dart';
 import 'session_page.dart';
@@ -166,96 +166,130 @@ class _LicensesPageState extends State<LicensesPage> {
   void _showBuyInfo() {
     showDialog<void>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Acheter une licence'),
-        content: const Text(
+      builder: (context) => TiliDialog(
+        title: 'Acheter une licence',
+        icon: Icons.add_card,
+        actions: [TiliButton(label: 'Compris', onPressed: () => Navigator.of(context).pop())],
+        child: const Text(
           "L'achat de licence se fait depuis le site web Tili, rubrique « Licences ».\n\n"
           'Une fois le paiement validé, la licence apparaîtra ici et vous pourrez y associer votre commerce.',
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('OK')),
-        ],
       ),
     );
   }
 
   String _shortId(String id) => id.length > 8 ? '${id.substring(0, 8).toUpperCase()}…' : id.toUpperCase();
 
-  Widget _statusChip(_LicenseStatus status) {
-    final (label, color) = switch (status) {
-      _LicenseStatus.active => ('Active', Colors.green),
-      _LicenseStatus.expired => ('Expirée', Colors.amber.shade800),
-      _LicenseStatus.inactive => ('Inactive', Colors.grey),
+  Widget _statusBadge(_LicenseStatus status) {
+    final (label, tone) = switch (status) {
+      _LicenseStatus.active => ('Active', TiliTone.success),
+      _LicenseStatus.expired => ('Expirée', TiliTone.warning),
+      _LicenseStatus.inactive => ('Inactive', TiliTone.neutral),
     };
-    return Chip(
-      label: Text(label, style: TextStyle(color: color, fontWeight: FontWeight.w600)),
-      backgroundColor: color.withValues(alpha: 0.1),
-      side: BorderSide.none,
-      visualDensity: VisualDensity.compact,
+    return StatusBadge(label: label, tone: tone, dot: true);
+  }
+
+  Widget _metaRow(IconData icon, String label, String value) {
+    final p = context.palette;
+    return Padding(
+      padding: const EdgeInsets.only(top: TiliSpace.sm),
+      child: Row(
+        children: [
+          Icon(icon, size: 14, color: p.border),
+          const SizedBox(width: TiliSpace.sm),
+          Text(label, style: context.text.bodySmall?.copyWith(color: p.textSubtle)),
+          const SizedBox(width: TiliSpace.sm),
+          Expanded(
+            child: Text(
+              value,
+              textAlign: TextAlign.right,
+              overflow: TextOverflow.ellipsis,
+              style: context.text.bodySmall?.copyWith(color: p.textMuted, fontWeight: FontWeight.w500),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
   Widget _licenseCard(Map<String, dynamic> license) {
+    final p = context.palette;
     final status = _statusOf(license);
     final hasStore = _hasStore(license);
     final store = _storesById[license['licence_id']?.toString()];
-    return Card(
-      margin: const EdgeInsets.symmetric(vertical: 6),
-      color: hasStore ? Colors.orange.shade50 : null,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: () => _openLicense(license),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
+    return TiliCard(
+      onTap: () => _openLicense(license),
+      highlight: hasStore,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(hasStore ? Icons.store : Icons.add_business, size: 36, color: hasStore ? Colors.orange : Colors.red),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Flexible(
-                          child: Text(
-                            hasStore ? license['store']['name'].toString() : 'ASSOCIER UN COMMERCE',
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                              color: hasStore ? null : Colors.red,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        _statusChip(status),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Wrap(
-                      spacing: 16,
-                      children: [
-                        Text('Licence ${_shortId(license['licence_id']?.toString() ?? '')}'),
-                        Text('Expire le ${_formatDate(license['expiration']?.toString())}'),
-                        if (store != null) ...[
-                          Text('SIRET ${store['siret'] ?? 'N/A'}'),
-                          Text('TVA ${store['numero_tva'] ?? 'N/A'}'),
-                          Text('Créée le ${_formatDate(store['date_creation']?.toString())}'),
-                        ],
-                      ],
-                    ),
-                  ],
-                ),
+              IconTile(
+                icon: hasStore ? Icons.storefront_outlined : Icons.add_business_outlined,
+                tone: hasStore ? TiliTone.accent : TiliTone.neutral,
+                size: 44,
               ),
-              TextButton(
-                onPressed: () => _refund(license),
-                style: TextButton.styleFrom(foregroundColor: Colors.red),
-                child: const Text('Rembourser'),
-              ),
+              const Spacer(),
+              _statusBadge(status),
             ],
           ),
-        ),
+          const SizedBox(height: TiliSpace.lg),
+          Text(
+            hasStore ? license['store']['name'].toString() : 'Associer un commerce',
+            overflow: TextOverflow.ellipsis,
+            style: context.text.titleMedium?.copyWith(
+              fontFamily: TiliFonts.display,
+              fontWeight: FontWeight.w700,
+              color: hasStore ? null : p.accentStrong,
+            ),
+          ),
+          const SizedBox(height: TiliSpace.xxs),
+          Text(
+            hasStore ? 'Touchez pour ouvrir la caisse' : 'Licence disponible — créez votre commerce',
+            style: context.text.bodySmall?.copyWith(color: p.textSubtle),
+          ),
+          const SizedBox(height: TiliSpace.md),
+          Divider(color: p.borderSubtle),
+          _metaRow(Icons.confirmation_number_outlined, 'Licence', _shortId(license['licence_id']?.toString() ?? '')),
+          _metaRow(Icons.event_outlined, 'Expire le', _formatDate(license['expiration']?.toString())),
+          if (store != null) ...[
+            _metaRow(Icons.badge_outlined, 'SIRET', store['siret']?.toString() ?? 'N/A'),
+            _metaRow(Icons.receipt_long_outlined, 'TVA', store['numero_tva']?.toString() ?? 'N/A'),
+            _metaRow(Icons.calendar_today_outlined, 'Créé le', _formatDate(store['date_creation']?.toString())),
+          ],
+          const SizedBox(height: TiliSpace.md),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TiliButton(
+              label: 'Rembourser',
+              icon: Icons.undo,
+              size: TiliButtonSize.sm,
+              variant: TiliButtonVariant.dangerGhost,
+              onPressed: () => _refund(license),
+            ),
+          ),
+        ],
       ),
+    );
+  }
+
+  Widget _grid(List<dynamic> licenses) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const gap = TiliSpace.gutter;
+        final columns = (constraints.maxWidth / 340).floor().clamp(1, 4);
+        final width = (constraints.maxWidth - gap * (columns - 1)) / columns;
+        return Wrap(
+          spacing: gap,
+          runSpacing: gap,
+          children: [
+            for (final l in licenses) SizedBox(width: width, child: _licenseCard((l as Map).cast<String, dynamic>())),
+          ],
+        );
+      },
     );
   }
 
@@ -263,59 +297,63 @@ class _LicensesPageState extends State<LicensesPage> {
   Widget build(BuildContext context) {
     final licenses = _licenses;
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('VOS LICENCES / COMMERCES'),
-        automaticallyImplyLeading: false,
+      appBar: TiliAppBar(
+        title: 'Mes commerces',
+        showBack: false,
+        leading: const Padding(
+          padding: EdgeInsets.only(left: TiliSpace.lg),
+          child: Center(child: BrandMark(onDark: false, size: 36, showName: false)),
+        ),
         actions: [
-          IconButton(tooltip: 'Acheter une licence', onPressed: _showBuyInfo, icon: const Icon(Icons.add_card)),
-          IconButton(tooltip: 'Mon compte', onPressed: _openAccount, icon: const Icon(Icons.account_circle)),
-          IconButton(tooltip: 'Se déconnecter', onPressed: _logout, icon: const Icon(Icons.logout)),
+          TiliButton(label: 'Acheter une licence', icon: Icons.add, variant: TiliButtonVariant.soft, size: TiliButtonSize.sm, onPressed: _showBuyInfo),
+          const SizedBox(width: TiliSpace.sm),
+          TiliIconButton(tooltip: 'Mon compte', onPressed: _openAccount, icon: Icons.person_outline),
+          TiliIconButton(tooltip: 'Se déconnecter', onPressed: _logout, icon: Icons.logout),
         ],
       ),
+      floatingActionButton: FullscreenButton(isFullScreen: widget.isFullScreen, onToggle: widget.onToggleFullScreen),
       body: licenses == null
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
               onRefresh: _loadLicenses,
-              child: ListView(
-                padding: const EdgeInsets.all(16),
-                children: [
-                  if (_error != null)
-                    Card(
-                      color: Colors.red.shade50,
-                      child: Padding(padding: const EdgeInsets.all(12), child: Text(_error!)),
-                    ),
-                  if (licenses.isEmpty) ...[
-                    const SizedBox(height: 40),
-                    Center(child: Image.asset('assets/tiliLogo.png', height: 150)),
-                    const SizedBox(height: 16),
-                    const Center(child: Text('Aucune licence trouvée')),
-                    const SizedBox(height: 8),
-                    Center(
-                      child: TextButton(onPressed: _showBuyInfo, child: const Text('Comment obtenir une licence ?')),
-                    ),
-                  ] else ...[
-                    Row(
+              child: licenses.isEmpty
+                  ? ListView(
                       children: [
-                        StatCard(label: 'Total', value: licenses.length, icon: Icons.credit_card, color: Colors.grey),
-                        StatCard(
-                          label: 'Actives',
-                          value: licenses.where((l) => _statusOf(l) == _LicenseStatus.active).length,
-                          icon: Icons.check_circle,
-                          color: Colors.green,
+                        if (_error != null) Padding(padding: const EdgeInsets.all(TiliSpace.page), child: Notice(message: _error!, tone: TiliTone.danger)),
+                        SizedBox(
+                          height: 420,
+                          child: EmptyState(
+                            icon: Icons.storefront_outlined,
+                            title: 'Aucune licence',
+                            message: 'Achetez une licence sur le site web Tili pour créer votre premier commerce.',
+                            action: TiliButton(label: 'Comment obtenir une licence ?', variant: TiliButtonVariant.accent, onPressed: _showBuyInfo),
+                          ),
                         ),
-                        StatCard(label: 'Associées', value: licenses.where(_hasStore).length, icon: Icons.store, color: Colors.orange),
+                      ],
+                    )
+                  : ListView(
+                      padding: const EdgeInsets.all(TiliSpace.page),
+                      children: [
+                        const PageHeader(title: 'Licences & commerces', subtitle: 'Sélectionnez un commerce pour ouvrir la caisse.'),
+                        const SizedBox(height: TiliSpace.xl),
+                        if (_error != null) ...[Notice(message: _error!, tone: TiliTone.danger), const SizedBox(height: TiliSpace.lg)],
+                        StatRow(
+                          children: [
+                            StatCard(label: 'Licences', value: licenses.length, icon: Icons.credit_card, tone: TiliTone.brand),
+                            StatCard(
+                              label: 'Actives',
+                              value: licenses.where((l) => _statusOf(l) == _LicenseStatus.active).length,
+                              icon: Icons.check_circle_outline,
+                              tone: TiliTone.success,
+                            ),
+                            StatCard(label: 'Commerces', value: licenses.where(_hasStore).length, icon: Icons.storefront_outlined, tone: TiliTone.accent),
+                          ],
+                        ),
+                        const SizedBox(height: TiliSpace.xl),
+                        _grid(licenses),
                       ],
                     ),
-                    const SizedBox(height: 8),
-                    ...licenses.map((l) => _licenseCard((l as Map).cast<String, dynamic>())),
-                  ],
-                ],
-              ),
             ),
-      floatingActionButton: IconButton(
-        onPressed: widget.onToggleFullScreen,
-        icon: Icon(widget.isFullScreen ? Icons.fullscreen_exit : Icons.fullscreen),
-      ),
     );
   }
 }
