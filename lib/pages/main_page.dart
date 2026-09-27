@@ -4,7 +4,9 @@ import 'session_page.dart';
 import '../services/token_service.dart';
 import '../services/auth_service.dart';
 import 'package:jwt_decoder/jwt_decoder.dart';
-import 'create_catalog_page.dart';
+import '../services/active_catalog_service.dart';
+import '../services/profile_service.dart';
+import '../utils/pricing.dart';
 import 'settings_pages.dart';
 
 /* This widget represents the main page of the application after the user has
@@ -68,9 +70,11 @@ class _MainPageState extends State<MainPage> {
     final storeId = await TokenService.getToken(TokenType.license);
     if (token != null && storeId != null) {
       final catalog = await AuthService.getCatalog(token, storeId);
-      final catalogId = catalog != null && catalog.isNotEmpty
-          ? catalog.first['catalog_id']?.toString()
-          : null;
+      final activeCatalogId = await ActiveCatalogService.get(storeId);
+      final catalogIds = (catalog ?? []).map((c) => c['catalog_id']?.toString()).toList();
+      final catalogId = catalogIds.contains(activeCatalogId)
+          ? activeCatalogId
+          : (catalogIds.isEmpty ? null : catalogIds.first);
       if (!mounted) return;
         final categories = catalogId == null
           ? <dynamic>[]
@@ -81,6 +85,7 @@ class _MainPageState extends State<MainPage> {
           .whereType<String>()
           .toSet();
       setState(() {
+        if (catalogId != _currentCatalogId) _selectedCategory = 'Tous';
         _catalog = catalog;
         _isLoadingCatalog = false;
         _categories = categories;
@@ -110,9 +115,13 @@ class _MainPageState extends State<MainPage> {
         .toList();
   }
 
-  double _itemPrice(dynamic item) {
-    return double.tryParse(item['price']?.toString() ?? '') ?? 0;
-  }
+  double _itemPrice(dynamic item) => itemPriceTTC(item);
+
+  String? get _currentCatalogName => _catalog
+      ?.cast<Map<String, dynamic>?>()
+      .firstWhere((c) => c?['catalog_id']?.toString() == _currentCatalogId, orElse: () => null)?['name']
+      ?.toString();
+
 
   double get _cartTotal {
     return _cartItems.fold(0, (total, item) {
@@ -191,6 +200,9 @@ class _MainPageState extends State<MainPage> {
     );
   }
 
+  /* The PIN is checked against the backend and must belong to an Admin or
+  Super admin of this store (same rule as the web back-office). The admin's
+  own ProfileToken is then used for every call made from the settings. */
   Future<void> _openSettings() async {
     final pin = await _showSettingsPinDialog();
     if (pin == null) {
@@ -200,17 +212,38 @@ class _MainPageState extends State<MainPage> {
       _showSnackBar('Le PIN doit contenir 6 chiffres');
       return;
     }
+    final storeId = await TokenService.getToken(TokenType.license);
+    if (storeId == null) return;
 
-    Navigator.of(context).push(
+    final Map<String, dynamic> result;
+    try {
+      result = await ProfileService.loginWithPin(storeId, pin);
+    } catch (e) {
+      _showSnackBar(e.toString());
+      return;
+    }
+    final profile = (result['profile'] as Map?)?.cast<String, dynamic>() ?? {};
+    final level = profile['level_access'] as int? ?? 99;
+    if (level > 2) {
+      _showSnackBar('Droits administrateur requis pour accéder aux paramètres');
+      return;
+    }
+    if (!mounted) return;
+
+    await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => SettingsPage(
           license: widget.license,
           isFullScreen: widget.isFullScreen,
           onToggleFullScreen: widget.onToggleFullScreen,
+          storeId: storeId,
+          adminToken: result['token'].toString(),
+          adminProfile: profile,
           currentCatalogId: _currentCatalogId,
         ),
       ),
     );
+    if (mounted) _loadCatalog();
   }
 
   void _logout() {
@@ -356,34 +389,22 @@ class _MainPageState extends State<MainPage> {
                           ),
                         ),
                       ),
-                    const SizedBox(height: 16),
+                    SizedBox(
+                      height: 16,
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        child: Text(
+                          _currentCatalogName ?? '',
+                          style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                        ),
+                      ),
+                    ),
                     Expanded(
                       child: Container(
                         // Placeholder for the catalog items list
                         color: Colors.grey[200],
                         child: _isLoadingCatalog
-                            ? GestureDetector(
-                                onTap: () async {
-                                  final result = await showDialog(
-                                    context: context,
-                                    builder: (context) =>
-                                        const CreateCatalogDialog(),
-                                  );
-                                  if (result == true) {
-                                    _loadCatalog();
-                                  }
-                                },
-                                child: const Center(
-                                  child: Text(
-                                    'Créer un catalogue',
-                                    style: TextStyle(
-                                      color: Colors.blue,
-                                      fontSize: 16,
-                                      decoration: TextDecoration.underline,
-                                    ),
-                                  ),
-                                ),
-                              )
+                            ? const Center(child: CircularProgressIndicator())
                             : _catalog != null && _catalog!.isNotEmpty
                             ? _visibleItems.isEmpty
                                 ? const Center(child: Text('Aucun produit'))
@@ -405,7 +426,7 @@ class _MainPageState extends State<MainPage> {
                                             'Catégorie: ${item['categorie']?['type'] ?? 'Inconnue'}',
                                           ),
                                           trailing: Text(
-                                            '${item['price'] ?? '0.00'} €',
+                                            formatEuro(_itemPrice(item)),
                                             style: const TextStyle(
                                               fontWeight: FontWeight.bold,
                                             ),
@@ -414,26 +435,18 @@ class _MainPageState extends State<MainPage> {
                                       );
                                     },
                                   )
-                            : GestureDetector(
-                                onTap: () async {
-                                  final result = await showDialog(
-                                    context: context,
-                                    builder: (context) =>
-                                        const CreateCatalogDialog(),
-                                  );
-                                  if (result == true) {
-                                    _loadCatalog();
-                                  }
-                                },
-                                child: const Center(
-                                  child: Text(
-                                    'Pas de catalogue',
-                                    style: TextStyle(
-                                      color: Colors.blue,
-                                      fontSize: 16,
-                                      decoration: TextDecoration.underline,
+                            : Center(
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Text('Aucun catalogue pour ce commerce'),
+                                    const SizedBox(height: 8),
+                                    TextButton.icon(
+                                      onPressed: _openSettings,
+                                      icon: const Icon(Icons.settings),
+                                      label: const Text('Créer un catalogue dans les paramètres'),
                                     ),
-                                  ),
+                                  ],
                                 ),
                               ),
                       ),

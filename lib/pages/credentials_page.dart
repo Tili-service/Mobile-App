@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import '../services/token_service.dart';
 import 'licenses_page.dart';
+import 'register_page.dart';
 
 /* The CredentialsPage is a stateful widget that serves as the initial setup screen
 for the application. It allows users to enter their email, password, and a PIN
@@ -70,6 +71,16 @@ class _CredentialsPageState extends State<CredentialsPage> {
     }
   }
 
+  Future<void> _openRegister() async {
+    final email = await Navigator.of(context).push<String>(
+      MaterialPageRoute(builder: (_) => const RegisterPage()),
+    );
+    if (email != null) {
+      emailController.text = email;
+      passwordController.clear();
+    }
+  }
+
   @override
   void dispose() {
     emailController.dispose();
@@ -104,7 +115,18 @@ class _CredentialsPageState extends State<CredentialsPage> {
                   icon: const Icon(Icons.arrow_forward),
                   label: const Text("CONTINUER"),
                 ),
-              )
+              ),
+              const SizedBox(height: 12),
+              TextButton(
+                onPressed: _openRegister,
+                child: const Text("Pas encore de compte ? Créer un compte"),
+              ),
+              TextButton(
+                onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("Réinitialisation du mot de passe bientôt disponible")),
+                ),
+                child: const Text("Mot de passe oublié ?"),
+              ),
             ],
           ),
         ),

@@ -59,7 +59,7 @@ class _CatalogEditPageState extends State<CatalogEditPage> {
 
     final token = await TokenService.getToken(TokenType.user);
     if (token != null) {
-      final success = await AuthService.updateCatalog(token, widget.catalog['catalog_id'].toString(), {
+      final success = await AuthService.updateCatalog(token, widget.catalog['store_id'].toString(), widget.catalog['catalog_id'].toString(), {
         'name': _nameController.text,
         'description': _descriptionController.text,
       });
@@ -107,7 +107,7 @@ class _CatalogEditPageState extends State<CatalogEditPage> {
 
       final token = await TokenService.getToken(TokenType.user);
       if (token != null) {
-        final success = await AuthService.deleteCatalog(token, widget.catalog['catalog_id'].toString());
+        final success = await AuthService.deleteCatalog(token, widget.catalog['store_id'].toString(), widget.catalog['catalog_id'].toString());
 
         if (success) {
           ScaffoldMessenger.of(context).showSnackBar(

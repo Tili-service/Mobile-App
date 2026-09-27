@@ -54,7 +54,7 @@ class AuthService {
 
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
-      return data as List<dynamic>;
+      return data == null ? <dynamic>[] : data as List<dynamic>;
     }
     return null;
   }
@@ -155,8 +155,8 @@ class AuthService {
   /* The updateCatalog method takes an authentication token, a catalog ID, and data to update,
   constructs a PUT request to the backend API's catalog update endpoint, and includes the token
   in the Authorization header. It returns true if the update is successful (status 200). */
-  static Future<bool> updateCatalog(String token, String catalogId, Map<String, dynamic> data) async {
-    final url = Uri.parse('$baseUrl/catalog/$catalogId');
+  static Future<bool> updateCatalog(String token, String storeId, String catalogId, Map<String, dynamic> data) async {
+    final url = Uri.parse('$baseUrl/catalog/store/$storeId/$catalogId');
     final response = await http.put(
       url,
       headers: {
@@ -172,8 +172,8 @@ class AuthService {
   /* The deleteCatalog method takes an authentication token and a catalog ID, constructs
   a DELETE request to the backend API's catalog delete endpoint, and includes the token
   in the Authorization header. It returns true if the deletion is successful (status 200). */
-  static Future<bool> deleteCatalog(String token, String catalogId) async {
-    final url = Uri.parse('$baseUrl/catalog/$catalogId');
+  static Future<bool> deleteCatalog(String token, String storeId, String catalogId) async {
+    final url = Uri.parse('$baseUrl/catalog/store/$storeId/$catalogId');
     final response = await http.delete(
       url,
       headers: {

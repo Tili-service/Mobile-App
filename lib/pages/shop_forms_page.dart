@@ -55,14 +55,22 @@ class _ShopFormsPageState extends State<ShopFormsPage> {
   was an issue creating the store. This method ensures that the user can only proceed to
   the next step if the store is successfully created, providing feedback in case of errors. */
   void _submit() async {
+    if (nameController.text.trim().isEmpty ||
+        siretController.text.trim().isEmpty ||
+        tvaController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Nom, SIRET et numéro de TVA sont requis')),
+      );
+      return;
+    }
     final token = await TokenService.getToken(TokenType.shop);
     if (token != null) {
       final result = await StoreService.createStore(
         token,
         widget.license['licence_id'],
-        nameController.text,
-        tvaController.text,
-        siretController.text,
+        nameController.text.trim(),
+        tvaController.text.trim(),
+        siretController.text.trim(),
       );
       if (result != null) {
         final storeId = result['store_id']?.toString();
