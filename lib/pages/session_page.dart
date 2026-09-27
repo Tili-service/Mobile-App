@@ -1,17 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/token_service.dart';
-import '../services/auth_service.dart';
+import '../services/profile_service.dart';
+import '../widgets/dialogs.dart';
 import 'main_page.dart';
 
-/* The SessionPage is a stateful widget that represents the session screen of the application.
-It displays the name of the store associated with the selected license and prompts the user
-to enter a 6-digit PIN to continue. The page includes an input field for the PIN and a button
-to submit the PIN. When the user taps the "Continuer" button, it checks if the entered PIN
-is valid by calling the AuthService's getPin method. If the PIN is correct, it
-navigates to the MainPage. If the PIN is incorrect, it shows a SnackBar with an error message
-and clears the input field. The page also includes a floating action button to toggle
-full-screen mode. */
+/* PIN entry for the selected shop: opens the POS as the matching profile. */
 class SessionPage extends StatefulWidget {
   const SessionPage({
     super.key,
@@ -28,16 +22,6 @@ class SessionPage extends StatefulWidget {
   State<SessionPage> createState() => _SessionPageState();
 }
 
-
-
-/* The _SessionPageState class manages the state of the SessionPage widget. It includes
-a TextEditingController for the PIN input field. The _checkPin method is responsible for
-validating the entered PIN by calling the AuthService's getPin method with the authentication
-token, the entered PIN, and the store ID. If the PIN is correct, it navigates to the MainPage.
-If the PIN is incorrect, it shows a SnackBar with an error message and clears the input field.
-The build method constructs the UI of the page, including the display of the store name, the
-PIN input field, and the continue button. The floating action button allows the user to toggle
-full-screen mode. */
 class _SessionPageState extends State<SessionPage> {
   final pinController = TextEditingController();
 
@@ -47,46 +31,34 @@ class _SessionPageState extends State<SessionPage> {
     super.dispose();
   }
 
-  /* The _checkPin method is responsible for validating the entered PIN. It first checks if the
-  length of the entered PIN is 6 digits. If it is, it retrieves the authentication token and
-  store ID from the TokenService. If both the token and store ID are available, it calls the
-  AuthService's getPin method with the token, entered PIN, and store ID. If the result is not null
-  (indicating a successful PIN validation), it navigates to the MainPage. If the result is
-  null (indicating an incorrect PIN), it shows a SnackBar with an error message and clears the
-  input field. If the entered PIN does not have 6 digits, it shows a SnackBar with a message
-  indicating that the PIN must contain 6 digits. */
+  /* Checks the 6-digit PIN against the backend for the selected store, saves
+  the returned ProfileToken and opens the POS; clears the field on failure. */
   void _checkPin() async {
-    if (pinController.text.length == 6) {
-      final token = await TokenService.getToken(TokenType.shop);
-      final storeId = await TokenService.getToken(TokenType.license);
-      if (token != null && storeId != null) {
-        final result = await AuthService.getPin(token, pinController.text, storeId);
-        if (result != null) {
-          // Save the user token
-          if (result['token'] != null) {
-            await TokenService.saveToken(TokenType.user, result['token']);
-          }
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(
-              builder: (_) => MainPage(
-                isFullScreen: widget.isFullScreen,
-                onToggleFullScreen: widget.onToggleFullScreen,
-                license: widget.license,
-              ),
-            ),
-          );
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('PIN incorrect')),
-          );
-          pinController.clear();
-        }
-      }
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Le PIN doit contenir 6 chiffres')),
-      );
+    if (pinController.text.length != 6) {
+      showMessage(context, 'Le PIN doit contenir 6 chiffres', error: true);
+      return;
     }
+    final storeId = await TokenService.getToken(TokenType.license);
+    if (storeId == null) return;
+    final Map<String, dynamic> result;
+    try {
+      result = await ProfileService.loginWithPin(storeId, pinController.text);
+    } catch (_) {
+      if (mounted) showMessage(context, 'PIN incorrect', error: true);
+      pinController.clear();
+      return;
+    }
+    await TokenService.saveToken(TokenType.user, result['token'].toString());
+    if (!mounted) return;
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(
+        builder: (_) => MainPage(
+          isFullScreen: widget.isFullScreen,
+          onToggleFullScreen: widget.onToggleFullScreen,
+          license: widget.license,
+        ),
+      ),
+    );
   }
 
   @override
