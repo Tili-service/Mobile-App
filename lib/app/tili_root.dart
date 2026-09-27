@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_fullscreen/flutter_fullscreen.dart';
 
 import '../pages/credentials_page.dart';
+import '../theme/theme.dart';
 
 /* App root: owns the fullscreen state (passed down to every page for the
 toggle button) and always starts on the merchant login screen. */
@@ -49,7 +50,7 @@ class _TiliRootState extends State<TiliRoot> with FullScreenListener {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(fontFamily: 'TiliFont'),
+      theme: TiliTheme.light(),
       home: CredentialsPage(
         isFullScreen: isFullScreen,
         onToggleFullScreen: toggleFullScreen,

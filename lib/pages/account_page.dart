@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import '../services/account_service.dart';
 import '../services/token_service.dart';
-import '../widgets/dialogs.dart';
+import '../theme/theme.dart';
+import '../widgets/widgets.dart';
 
 /* Merchant account settings (AccountToken): edit name/email, change password,
 delete the account. Pops with `true` when the account was deleted so the
@@ -114,93 +115,94 @@ class _AccountPageState extends State<AccountPage> {
     }
   }
 
-  Widget _section(String title, List<Widget> children, {Color? color}) {
-    return Card(
-      color: color,
-      margin: const EdgeInsets.only(bottom: 16),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 16),
-            ...children,
-          ],
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('MON COMPTE')),
+      appBar: const TiliAppBar(breadcrumb: 'Tili', title: 'Mon compte'),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : Center(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(16),
-                child: SizedBox(
-                  width: 560,
-                  child: Column(
-                    children: [
-                      _section('Informations', [
-                        TextField(
-                          controller: _nameController,
-                          decoration: const InputDecoration(labelText: 'Nom complet', border: OutlineInputBorder()),
+          : SingleChildScrollView(
+              child: PageBody(
+                maxWidth: TiliSizes.contentMaxWidth,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const PageHeader(title: 'Paramètres du compte', subtitle: 'Gérez vos informations personnelles et votre sécurité.'),
+                    const SizedBox(height: TiliSpace.xl),
+                    TiliSection(
+                      title: 'Informations',
+                      subtitle: 'Nom et adresse email du compte',
+                      icon: Icons.person_outline,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(child: TiliField(controller: _nameController, label: 'Nom complet', icon: Icons.person_outline)),
+                            const SizedBox(width: TiliSpace.md),
+                            Expanded(
+                              child: TiliField(
+                                controller: _emailController,
+                                label: 'Email',
+                                icon: Icons.mail_outline,
+                                keyboardType: TextInputType.emailAddress,
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 12),
-                        TextField(
-                          controller: _emailController,
-                          keyboardType: TextInputType.emailAddress,
-                          decoration: const InputDecoration(labelText: 'Email', border: OutlineInputBorder()),
+                        const SizedBox(height: TiliSpace.xl),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TiliButton(label: 'Enregistrer', icon: Icons.check, loading: _saving, onPressed: _saveInfo),
                         ),
-                        const SizedBox(height: 16),
-                        FilledButton(
-                          onPressed: _saving ? null : _saveInfo,
-                          child: const Text('Enregistrer les modifications'),
+                      ],
+                    ),
+                    const SizedBox(height: TiliSpace.gutter),
+                    TiliSection(
+                      title: 'Mot de passe',
+                      subtitle: '6 caractères minimum',
+                      icon: Icons.lock_outline,
+                      children: [
+                        TiliField(controller: _oldPasswordController, label: 'Mot de passe actuel', password: true),
+                        const SizedBox(height: TiliSpace.lg),
+                        Row(
+                          children: [
+                            Expanded(child: TiliField(controller: _newPasswordController, label: 'Nouveau mot de passe', password: true)),
+                            const SizedBox(width: TiliSpace.md),
+                            Expanded(child: TiliField(controller: _confirmPasswordController, label: 'Confirmation', password: true)),
+                          ],
                         ),
-                      ]),
-                      _section('Mot de passe', [
-                        TextField(
-                          controller: _oldPasswordController,
-                          obscureText: true,
-                          decoration: const InputDecoration(labelText: 'Mot de passe actuel', border: OutlineInputBorder()),
+                        const SizedBox(height: TiliSpace.xl),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TiliButton(label: 'Changer le mot de passe', loading: _savingPassword, onPressed: _changePassword),
                         ),
-                        const SizedBox(height: 12),
-                        TextField(
-                          controller: _newPasswordController,
-                          obscureText: true,
-                          decoration: const InputDecoration(labelText: 'Nouveau mot de passe', border: OutlineInputBorder()),
+                      ],
+                    ),
+                    const SizedBox(height: TiliSpace.gutter),
+                    TiliSection(
+                      title: 'Zone de danger',
+                      icon: Icons.warning_amber_rounded,
+                      tone: TiliTone.danger,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                "Une fois votre compte supprimé, il n'y a pas de retour en arrière.",
+                                style: context.text.bodyMedium?.copyWith(color: context.palette.textMuted),
+                              ),
+                            ),
+                            const SizedBox(width: TiliSpace.lg),
+                            TiliButton(
+                              label: 'Supprimer mon compte',
+                              icon: Icons.delete_outline,
+                              variant: TiliButtonVariant.danger,
+                              onPressed: _deleteAccount,
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 12),
-                        TextField(
-                          controller: _confirmPasswordController,
-                          obscureText: true,
-                          decoration: const InputDecoration(labelText: 'Confirmer le nouveau mot de passe', border: OutlineInputBorder()),
-                        ),
-                        const SizedBox(height: 16),
-                        FilledButton(
-                          onPressed: _savingPassword ? null : _changePassword,
-                          child: const Text('Changer le mot de passe'),
-                        ),
-                      ]),
-                      _section(
-                        'Zone de danger',
-                        [
-                          const Text("Une fois votre compte supprimé, il n'y a pas de retour en arrière."),
-                          const SizedBox(height: 16),
-                          FilledButton(
-                            style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
-                            onPressed: _deleteAccount,
-                            child: const Text('Supprimer mon compte définitivement'),
-                          ),
-                        ],
-                        color: Colors.red.shade50,
-                      ),
-                    ],
-                  ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
             ),

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../services/profile_service.dart';
-import '../../widgets/dialogs.dart';
-import '../../widgets/stat_card.dart';
+import '../../theme/theme.dart';
+import '../../widgets/widgets.dart';
 
 class ProfilesSection extends StatefulWidget {
   const ProfilesSection({
@@ -144,42 +144,57 @@ class _ProfilesSectionState extends State<ProfilesSection> {
     await _run(() => ProfileService.deleteProfile(widget.token, profile['profile_id'].toString()), 'Profil supprimé');
   }
 
-  String _initials(String name) {
-    final parts = name.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
-    if (parts.isEmpty) return '?';
-    if (parts.length >= 2) return (parts.first[0] + parts.last[0]).toUpperCase();
-    return parts.first.substring(0, parts.first.length >= 2 ? 2 : 1).toUpperCase();
-  }
-
-  Widget _profileTile(Map<String, dynamic> p) {
+  Widget _profileCard(Map<String, dynamic> p) {
+    final palette = context.palette;
     final isSelf = p['profile_id']?.toString() == widget.currentProfileId;
     final active = p['is_active'] == true;
     final level = p['level_access'] as int? ?? 4;
-    return Card(
-      child: ListTile(
-        leading: CircleAvatar(child: Text(_initials(p['name']?.toString() ?? ''))),
-        title: Text('${p['name']}${isSelf ? ' (vous)' : ''}'),
-        subtitle: Wrap(
-          spacing: 8,
-          children: [
-            Text(ProfileService.levelNames[level] ?? 'Inconnu'),
-            Text(active ? '● Actif' : '● Inactif', style: TextStyle(color: active ? Colors.green : Colors.grey)),
-          ],
-        ),
-        onTap: () => _edit(p),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            IconButton(tooltip: 'Modifier', onPressed: () => _edit(p), icon: const Icon(Icons.edit)),
-            IconButton(tooltip: 'Régénérer le PIN', onPressed: () => _resetPin(p), icon: const Icon(Icons.pin)),
-            IconButton(
-              tooltip: isSelf ? 'Impossible de supprimer votre propre profil' : 'Supprimer',
-              onPressed: isSelf ? null : () => _delete(p),
-              icon: const Icon(Icons.delete_outline),
-              color: Colors.red,
-            ),
-          ],
-        ),
+    final name = p['name']?.toString() ?? '';
+    return TiliCard(
+      onTap: () => _edit(p),
+      padding: const EdgeInsets.all(TiliSpace.lg + 2),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Avatar(name: name, size: 44, tone: active ? TiliTone.accent : TiliTone.neutral),
+              const SizedBox(width: TiliSpace.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '$name${isSelf ? ' (vous)' : ''}',
+                      overflow: TextOverflow.ellipsis,
+                      style: context.text.titleSmall,
+                    ),
+                    const SizedBox(height: TiliSpace.xxs),
+                    Text(ProfileService.levelNames[level] ?? 'Inconnu', style: context.text.bodySmall?.copyWith(color: palette.textSubtle)),
+                  ],
+                ),
+              ),
+              StatusBadge(label: active ? 'Actif' : 'Inactif', tone: active ? TiliTone.success : TiliTone.neutral, dot: true),
+            ],
+          ),
+          const SizedBox(height: TiliSpace.md),
+          Divider(color: palette.borderSubtle),
+          const SizedBox(height: TiliSpace.xs),
+          Row(
+            children: [
+              TiliButton(label: 'Modifier', icon: Icons.edit_outlined, size: TiliButtonSize.sm, variant: TiliButtonVariant.ghost, onPressed: () => _edit(p)),
+              TiliButton(label: 'PIN', icon: Icons.pin_outlined, size: TiliButtonSize.sm, variant: TiliButtonVariant.ghost, onPressed: () => _resetPin(p)),
+              const Spacer(),
+              TiliIconButton(
+                tooltip: isSelf ? 'Impossible de supprimer votre propre profil' : 'Supprimer',
+                onPressed: isSelf ? null : () => _delete(p),
+                icon: Icons.delete_outline,
+                tone: TiliTone.danger,
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -191,75 +206,85 @@ class _ProfilesSectionState extends State<ProfilesSection> {
     final filtered = _filtered;
     final activeCount = profiles.where((p) => p['is_active'] == true).length;
 
+    Widget body;
+    if (profiles.isEmpty) {
+      body = EmptyState(
+        icon: Icons.people_outline,
+        title: 'Aucun profil',
+        message: 'Créez des profils pour chacun de vos employés.',
+        action: TiliButton(label: 'Ajouter un profil', icon: Icons.person_add_alt, variant: TiliButtonVariant.accent, onPressed: _create),
+      );
+    } else if (filtered.isEmpty) {
+      body = const EmptyState(icon: Icons.search_off, title: 'Aucun résultat', tone: TiliTone.neutral);
+    } else {
+      body = RefreshIndicator(
+        onRefresh: _load,
+        child: LayoutBuilder(
+          builder: (context, c) {
+            const gap = TiliSpace.gutter;
+            final cols = (c.maxWidth / 320).floor().clamp(1, 4);
+            final w = (c.maxWidth - gap * (cols - 1)) / cols;
+            return ListView(
+              children: [
+                Wrap(
+                  spacing: gap,
+                  runSpacing: gap,
+                  children: [
+                    for (final p in filtered) SizedBox(width: w, child: _profileCard((p as Map).cast<String, dynamic>())),
+                  ],
+                ),
+              ],
+            );
+          },
+        ),
+      );
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
+        PageHeader(
+          title: 'Profils',
+          subtitle: '${profiles.length} profil${profiles.length > 1 ? 's' : ''} dans ce commerce',
+          actions: [TiliButton(label: 'Ajouter un profil', icon: Icons.person_add_alt, onPressed: _create)],
+        ),
+        const SizedBox(height: TiliSpace.xl),
+        if (_error != null) ...[Notice(message: _error!, tone: TiliTone.danger), const SizedBox(height: TiliSpace.md)],
+        StatRow(
           children: [
-            Text('Profils (${profiles.length})', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-            const Spacer(),
-            FilledButton.icon(onPressed: _create, icon: const Icon(Icons.person_add), label: const Text('Ajouter un profil')),
+            StatCard(label: 'Total', value: profiles.length, icon: Icons.people_outline, tone: TiliTone.brand),
+            StatCard(label: 'Actifs', value: activeCount, icon: Icons.check_circle_outline, tone: TiliTone.success),
+            StatCard(label: 'Inactifs', value: profiles.length - activeCount, icon: Icons.pause_circle_outline),
           ],
         ),
-        const SizedBox(height: 8),
-        if (_error != null) Text(_error!, style: const TextStyle(color: Colors.red)),
+        const SizedBox(height: TiliSpace.lg),
         Row(
           children: [
-            StatCard(label: 'Total', value: profiles.length),
-            StatCard(label: 'Actifs', value: activeCount, color: Colors.green),
-            StatCard(label: 'Inactifs', value: profiles.length - activeCount, color: Colors.grey),
-          ],
-        ),
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            Expanded(
-              child: TextField(
-                decoration: const InputDecoration(
-                  prefixIcon: Icon(Icons.search),
-                  hintText: 'Rechercher un profil…',
-                  border: OutlineInputBorder(),
-                  isDense: true,
-                ),
-                onChanged: (v) => setState(() => _search = v),
-              ),
-            ),
-            const SizedBox(width: 8),
-            DropdownButton<int?>(
+            Expanded(child: SearchField(hint: 'Rechercher un profil…', onChanged: (v) => setState(() => _search = v))),
+            const SizedBox(width: TiliSpace.sm),
+            TiliSelect<int?>(
               value: _roleFilter,
+              icon: Icons.shield_outlined,
               items: [
-                const DropdownMenuItem(value: null, child: Text('Tous les rôles')),
-                ...ProfileService.assignableLevels.map(
-                  (l) => DropdownMenuItem(value: l, child: Text(ProfileService.levelNames[l]!)),
-                ),
+                (null, 'Tous les rôles'),
+                for (final l in ProfileService.assignableLevels) (l, ProfileService.levelNames[l]!),
               ],
               onChanged: (v) => setState(() => _roleFilter = v),
             ),
-            const SizedBox(width: 8),
-            DropdownButton<_StatusFilter>(
+            const SizedBox(width: TiliSpace.sm),
+            TiliSelect<_StatusFilter>(
               value: _statusFilter,
               items: const [
-                DropdownMenuItem(value: _StatusFilter.all, child: Text('Tous les statuts')),
-                DropdownMenuItem(value: _StatusFilter.active, child: Text('Actif')),
-                DropdownMenuItem(value: _StatusFilter.inactive, child: Text('Inactif')),
+                (_StatusFilter.all, 'Tous les statuts'),
+                (_StatusFilter.active, 'Actif'),
+                (_StatusFilter.inactive, 'Inactif'),
               ],
               onChanged: (v) => setState(() => _statusFilter = v ?? _StatusFilter.all),
             ),
           ],
         ),
-        const SizedBox(height: 8),
-        Expanded(
-          child: profiles.isEmpty
-              ? const Center(child: Text('Aucun profil. Créez des profils pour chacun de vos employés.'))
-              : filtered.isEmpty
-                  ? const Center(child: Text('Aucun résultat.'))
-                  : RefreshIndicator(
-                      onRefresh: _load,
-                      child: ListView(
-                        children: filtered.map((p) => _profileTile((p as Map).cast<String, dynamic>())).toList(),
-                      ),
-                    ),
-        ),
+        const SizedBox(height: TiliSpace.lg),
+        Expanded(child: body),
       ],
     );
   }
@@ -311,45 +336,39 @@ class _ProfileFormDialogState extends State<_ProfileFormDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(widget.title),
-      content: SizedBox(
-        width: 420,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            TextField(
-              controller: _nameController,
-              autofocus: true,
-              decoration: const InputDecoration(labelText: 'Nom du profil', border: OutlineInputBorder()),
-            ),
-            const SizedBox(height: 16),
-            const Text('Rôle'),
-            const SizedBox(height: 8),
-            SegmentedButton<int>(
-              segments: ProfileService.assignableLevels
-                  .map((l) => ButtonSegment(value: l, label: Text(ProfileService.levelNames[l]!)))
-                  .toList(),
-              selected: {_level},
-              onSelectionChanged: (s) => setState(() => _level = s.first),
-            ),
-            if (widget.showActive) ...[
-              const SizedBox(height: 8),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Profil actif'),
-                value: _active,
-                onChanged: (v) => setState(() => _active = v),
-              ),
-            ],
-          ],
-        ),
-      ),
+    return TiliDialog(
+      title: widget.title,
+      icon: Icons.person_outline,
       actions: [
-        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Annuler')),
-        FilledButton(onPressed: _submit, child: const Text('Enregistrer')),
+        TiliButton(label: 'Annuler', variant: TiliButtonVariant.outline, onPressed: () => Navigator.of(context).pop()),
+        TiliButton(label: 'Enregistrer', onPressed: _submit),
       ],
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TiliField(controller: _nameController, label: 'Nom du profil', autofocus: true, onSubmitted: (_) => _submit()),
+          const SizedBox(height: TiliSpace.lg),
+          const SectionLabel('Rôle'),
+          const SizedBox(height: TiliSpace.sm),
+          SegmentedButton<int>(
+            segments: ProfileService.assignableLevels
+                .map((l) => ButtonSegment(value: l, label: Text(ProfileService.levelNames[l]!)))
+                .toList(),
+            selected: {_level},
+            onSelectionChanged: (s) => setState(() => _level = s.first),
+          ),
+          if (widget.showActive) ...[
+            const SizedBox(height: TiliSpace.md),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: Text('Profil actif', style: context.text.titleSmall),
+              value: _active,
+              onChanged: (v) => setState(() => _active = v),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }

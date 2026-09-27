@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import '../../services/active_catalog_service.dart';
 import '../../services/catalog_service.dart';
 import '../../utils/pricing.dart';
-import '../../widgets/dialogs.dart';
+import '../../theme/theme.dart';
+import '../../widgets/widgets.dart';
 
 class CatalogSection extends StatefulWidget {
   const CatalogSection({
@@ -242,24 +243,35 @@ class _CatalogSectionState extends State<CatalogSection> {
     final current = item['categorie_id'].toString();
     final target = await showDialog<String>(
       context: context,
-      builder: (context) => SimpleDialog(
-        title: Text('Déplacer ${item['name']} vers :'),
-        children: _categories
-            .map((c) => SimpleDialogOption(
-                  onPressed: c['categorie_id'].toString() == current
+      builder: (context) => TiliDialog(
+        title: 'Déplacer ${item['name']}',
+        subtitle: 'Choisissez la catégorie de destination',
+        icon: Icons.drive_file_move_outline,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (final c in _categories)
+              Padding(
+                padding: const EdgeInsets.only(bottom: TiliSpace.sm),
+                child: TiliCard(
+                  padding: const EdgeInsets.symmetric(horizontal: TiliSpace.lg, vertical: TiliSpace.md),
+                  color: c['categorie_id'].toString() == current ? context.palette.surfaceMuted : null,
+                  onTap: c['categorie_id'].toString() == current
                       ? null
                       : () => Navigator.of(context).pop(c['categorie_id'].toString()),
                   child: Row(
                     children: [
-                      const Icon(Icons.label_outline),
-                      const SizedBox(width: 12),
-                      Text(c['type'].toString(),
-                          style: TextStyle(color: c['categorie_id'].toString() == current ? Colors.grey : null)),
-                      if (c['categorie_id'].toString() == current) const Text('  (actuelle)', style: TextStyle(color: Colors.grey)),
+                      Icon(Icons.label_outline, size: TiliSizes.icon, color: context.palette.textSubtle),
+                      const SizedBox(width: TiliSpace.md),
+                      Expanded(child: Text(c['type'].toString(), style: context.text.titleSmall)),
+                      if (c['categorie_id'].toString() == current) const StatusBadge(label: 'Actuelle'),
                     ],
                   ),
-                ))
-            .toList(),
+                ),
+              ),
+          ],
+        ),
       ),
     );
     if (target == null) return;
@@ -295,79 +307,108 @@ class _CatalogSectionState extends State<CatalogSection> {
   // ---- UI -----------------------------------------------------------------
 
   Widget _catalogBar() {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        child: Row(
-          children: [
-            Expanded(
-              child: SingleChildScrollView(
+    final p = context.palette;
+    return TiliCard(
+      padding: const EdgeInsets.symmetric(horizontal: TiliSpace.md, vertical: TiliSpace.sm + 2),
+      child: Row(
+        children: [
+          Expanded(
+            child: SizedBox(
+              height: TiliSizes.buttonMd,
+              child: ListView(
                 scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: _catalogs!
-                      .map((c) => Padding(
-                            padding: const EdgeInsets.only(right: 6),
-                            child: ChoiceChip(
-                              avatar: c['catalog_id'].toString() == _activeCatalogId
-                                  ? const Icon(Icons.star, color: Colors.orange)
-                                  : null,
-                              tooltip: c['catalog_id'].toString() == _activeCatalogId ? 'Catalogue actif en caisse' : null,
-                              label: Text(c['name']?.toString() ?? 'Catalogue'),
-                              selected: c['catalog_id'].toString() == _catalogId,
-                              onSelected: (_) {
-                                setState(() {
-                                  _catalogId = c['catalog_id'].toString();
-                                  _drillCategoryId = null;
-                                  _itemCategoryFilter = null;
-                                });
-                                _loadContent();
-                              },
-                            ),
-                          ))
-                      .toList(),
-                ),
+                children: [
+                  for (final c in _catalogs!)
+                    Padding(
+                      padding: const EdgeInsets.only(right: TiliSpace.sm),
+                      child: FilterPill(
+                        label: c['name']?.toString() ?? 'Catalogue',
+                        icon: c['catalog_id'].toString() == _activeCatalogId ? Icons.star_rounded : Icons.folder_outlined,
+                        selected: c['catalog_id'].toString() == _catalogId,
+                        onTap: () {
+                          setState(() {
+                            _catalogId = c['catalog_id'].toString();
+                            _drillCategoryId = null;
+                            _itemCategoryFilter = null;
+                          });
+                          _loadContent();
+                        },
+                      ),
+                    ),
+                ],
               ),
             ),
-            if (_catalogId == _activeCatalogId)
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 8),
-                child: Chip(
-                  avatar: Icon(Icons.star, color: Colors.orange, size: 18),
-                  label: Text('Actif en caisse'),
-                  visualDensity: VisualDensity.compact,
-                ),
-              )
-            else
-              TextButton.icon(
-                onPressed: _setActiveCatalog,
-                icon: const Icon(Icons.star_border),
-                label: const Text('Définir comme actif'),
-              ),
-            IconButton(tooltip: 'Nouveau catalogue', onPressed: _createCatalog, icon: const Icon(Icons.create_new_folder)),
-            IconButton(tooltip: 'Modifier', onPressed: _editCatalog, icon: const Icon(Icons.edit)),
-            IconButton(
-                tooltip: 'Supprimer', onPressed: _deleteCatalog, icon: const Icon(Icons.delete_outline), color: Colors.red),
-          ],
-        ),
+          ),
+          const SizedBox(width: TiliSpace.sm),
+          if (_catalogId == _activeCatalogId)
+            const StatusBadge(label: 'Actif en caisse', tone: TiliTone.accent, icon: Icons.star_rounded)
+          else
+            TiliButton(
+              label: 'Définir comme actif',
+              icon: Icons.star_border_rounded,
+              size: TiliButtonSize.sm,
+              variant: TiliButtonVariant.soft,
+              onPressed: _setActiveCatalog,
+            ),
+          const SizedBox(width: TiliSpace.sm),
+          Container(width: 1, height: 24, color: p.borderSubtle),
+          const SizedBox(width: TiliSpace.xs),
+          TiliIconButton(tooltip: 'Nouveau catalogue', onPressed: _createCatalog, icon: Icons.create_new_folder_outlined),
+          TiliIconButton(tooltip: 'Modifier', onPressed: _editCatalog, icon: Icons.edit_outlined),
+          TiliIconButton(tooltip: 'Supprimer', onPressed: _deleteCatalog, icon: Icons.delete_outline, tone: TiliTone.danger),
+        ],
       ),
     );
   }
 
   Widget _emptyCatalogPrompt() {
-    return Center(
+    return EmptyState(
+      icon: Icons.create_new_folder_outlined,
+      title: 'Aucun catalogue',
+      message: 'Créez-en un pour ajouter vos catégories et articles.',
+      action: TiliButton(
+        label: 'Créer le catalogue',
+        icon: Icons.add,
+        variant: TiliButtonVariant.accent,
+        onPressed: () => _createCatalog(initialName: 'Catalogue principal'),
+      ),
+    );
+  }
+
+  Widget _categoryCard(dynamic c) {
+    final id = c['categorie_id'].toString();
+    final count = _itemCount(id);
+    return TiliCard(
+      onTap: () => setState(() => _drillCategoryId = id),
+      padding: const EdgeInsets.fromLTRB(TiliSpace.lg, TiliSpace.lg, TiliSpace.sm, TiliSpace.sm),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.create_new_folder, size: 56, color: Colors.orange),
-          const SizedBox(height: 12),
-          const Text('Aucun catalogue', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 4),
-          const Text('Créez-en un pour ajouter vos catégories et articles.'),
-          const SizedBox(height: 16),
-          FilledButton.icon(
-            onPressed: () => _createCatalog(initialName: 'Catalogue principal'),
-            icon: const Icon(Icons.add),
-            label: const Text('Créer le catalogue'),
+          Row(
+            children: [
+              const IconTile(icon: Icons.sell_outlined, tone: TiliTone.accent),
+              const SizedBox(width: TiliSpace.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(c['type'].toString(), overflow: TextOverflow.ellipsis, style: context.text.titleSmall),
+                    Text('$count article${count != 1 ? 's' : ''}', style: context.text.bodySmall?.copyWith(color: context.palette.textSubtle)),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right, color: context.palette.border),
+              const SizedBox(width: TiliSpace.sm),
+            ],
+          ),
+          const SizedBox(height: TiliSpace.sm),
+          Row(
+            children: [
+              TiliButton(label: 'Modifier', icon: Icons.edit_outlined, size: TiliButtonSize.sm, variant: TiliButtonVariant.ghost, onPressed: () => _renameCategory(c)),
+              const Spacer(),
+              TiliButton(label: 'Supprimer', icon: Icons.delete_outline, size: TiliButtonSize.sm, variant: TiliButtonVariant.dangerGhost, onPressed: () => _deleteCategory(c)),
+            ],
           ),
         ],
       ),
@@ -382,62 +423,35 @@ class _CatalogSectionState extends State<CatalogSection> {
       children: [
         Row(
           children: [
-            Expanded(
-              child: TextField(
-                decoration: const InputDecoration(
-                    prefixIcon: Icon(Icons.search), hintText: 'Rechercher une catégorie…', border: OutlineInputBorder(), isDense: true),
-                onChanged: (v) => setState(() => _categorySearch = v),
-              ),
-            ),
-            const SizedBox(width: 8),
-            FilledButton.icon(onPressed: _createCategory, icon: const Icon(Icons.add), label: const Text('Nouvelle catégorie')),
+            Expanded(child: SearchField(hint: 'Rechercher une catégorie…', onChanged: (v) => setState(() => _categorySearch = v))),
+            const SizedBox(width: TiliSpace.sm),
+            TiliButton(label: 'Nouvelle catégorie', icon: Icons.add, onPressed: _createCategory),
           ],
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: TiliSpace.lg),
         Expanded(
           child: filtered.isEmpty
-              ? Center(child: Text(_categories.isEmpty ? 'Aucune catégorie. Créez-en une !' : 'Aucun résultat.'))
-              : GridView.extent(
-                  maxCrossAxisExtent: 320,
-                  childAspectRatio: 2.2,
-                  crossAxisSpacing: 8,
-                  mainAxisSpacing: 8,
-                  children: filtered.map((c) {
-                    final id = c['categorie_id'].toString();
-                    final count = _itemCount(id);
-                    return Card(
-                      margin: EdgeInsets.zero,
-                      child: Column(
-                        children: [
-                          Expanded(
-                            child: ListTile(
-                              leading: const CircleAvatar(child: Icon(Icons.label)),
-                              title: Text(c['type'].toString(), overflow: TextOverflow.ellipsis),
-                              subtitle: Text('$count article${count != 1 ? 's' : ''}'),
-                              trailing: const Icon(Icons.folder_open),
-                              onTap: () => setState(() => _drillCategoryId = id),
-                            ),
-                          ),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: TextButton.icon(
-                                    onPressed: () => _renameCategory(c), icon: const Icon(Icons.edit, size: 16), label: const Text('Modifier')),
-                              ),
-                              Expanded(
-                                child: TextButton.icon(
-                                  onPressed: () => _deleteCategory(c),
-                                  style: TextButton.styleFrom(foregroundColor: Colors.red),
-                                  icon: const Icon(Icons.delete_outline, size: 16),
-                                  label: const Text('Supprimer'),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
+              ? EmptyState(
+                  icon: _categories.isEmpty ? Icons.sell_outlined : Icons.search_off,
+                  title: _categories.isEmpty ? 'Aucune catégorie' : 'Aucun résultat',
+                  message: _categories.isEmpty ? 'Créez une catégorie (ex : Boissons) pour y ranger vos articles.' : null,
+                  tone: _categories.isEmpty ? TiliTone.accent : TiliTone.neutral,
+                )
+              : LayoutBuilder(
+                  builder: (context, c) {
+                    const gap = TiliSpace.md;
+                    final cols = (c.maxWidth / 300).floor().clamp(1, 4);
+                    final w = (c.maxWidth - gap * (cols - 1)) / cols;
+                    return ListView(
+                      children: [
+                        Wrap(
+                          spacing: gap,
+                          runSpacing: gap,
+                          children: [for (final cat in filtered) SizedBox(width: w, child: _categoryCard(cat))],
+                        ),
+                      ],
                     );
-                  }).toList(),
+                  },
                 ),
         ),
       ],
@@ -453,62 +467,77 @@ class _CatalogSectionState extends State<CatalogSection> {
       children: [
         Row(
           children: [
-            IconButton(onPressed: () => setState(() => _drillCategoryId = null), icon: const Icon(Icons.arrow_back)),
-            Text(_categoryName(id), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-            const SizedBox(width: 8),
-            Text('${items.length} article${items.length != 1 ? 's' : ''}', style: const TextStyle(color: Colors.grey)),
+            TiliIconButton(icon: Icons.arrow_back, tooltip: 'Retour', bordered: true, onPressed: () => setState(() => _drillCategoryId = null)),
+            const SizedBox(width: TiliSpace.md),
+            Text(_categoryName(id), style: context.text.titleLarge),
+            const SizedBox(width: TiliSpace.sm),
+            StatusBadge(label: '${items.length} article${items.length != 1 ? 's' : ''}'),
             const Spacer(),
-            FilledButton.icon(
-                onPressed: () => _createItem(categoryId: id), icon: const Icon(Icons.add), label: const Text('Ajouter un article')),
+            TiliButton(label: 'Ajouter un article', icon: Icons.add, onPressed: () => _createItem(categoryId: id)),
           ],
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: TiliSpace.lg),
         Expanded(
           child: items.isEmpty
-              ? const Center(child: Text('Aucun article dans cette catégorie.'))
-              : ListView(children: items.map(_itemTile).toList()),
+              ? const EmptyState(icon: Icons.inventory_2_outlined, title: 'Aucun article dans cette catégorie', tone: TiliTone.neutral)
+              : _itemList(items),
         ),
       ],
     );
   }
 
-  Widget _itemTile(dynamic item) {
-    final ht = itemPriceHT(item);
-    final rate = itemTaxRate(item);
-    return Card(
-      child: ListTile(
-        title: Text(item['name'].toString()),
-        subtitle: Text('${_categoryName(item['categorie_id'].toString())} · HT ${formatEuro(ht)} · TVA ${(rate * 100).toStringAsFixed(rate * 100 % 1 == 0 ? 0 : 1)}%'),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(formatEuro(itemPriceTTC(item)), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-            const SizedBox(width: 8),
-            IconButton(tooltip: 'Modifier', onPressed: () => _editItem(item), icon: const Icon(Icons.edit)),
-            IconButton(tooltip: 'Déplacer', onPressed: () => _moveItem(item), icon: const Icon(Icons.drive_file_move_outline)),
-            IconButton(
-                tooltip: 'Supprimer',
-                onPressed: () => _deleteItem(item),
-                icon: const Icon(Icons.delete_outline),
-                color: Colors.red),
-          ],
-        ),
+  Widget _itemList(List<dynamic> items) {
+    return TiliCard(
+      padding: EdgeInsets.zero,
+      child: ListView.separated(
+        itemCount: items.length,
+        separatorBuilder: (_, _) => const Divider(),
+        itemBuilder: (_, i) => _itemTile(items[i]),
       ),
     );
   }
 
-  Widget _sortChip(_SortKey key, String label) {
-    final selected = _sortKey == key;
-    return ChoiceChip(
-      label: Row(
-        mainAxisSize: MainAxisSize.min,
+  Widget _itemTile(dynamic item) {
+    final p = context.palette;
+    final ht = itemPriceHT(item);
+    final rate = itemTaxRate(item);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(TiliSpace.lg, TiliSpace.md, TiliSpace.sm, TiliSpace.md),
+      child: Row(
         children: [
-          Text(label),
-          if (selected) Icon(_sortAsc ? Icons.arrow_upward : Icons.arrow_downward, size: 14),
+          const IconTile(icon: Icons.inventory_2_outlined, size: 36),
+          const SizedBox(width: TiliSpace.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(item['name'].toString(), style: context.text.titleSmall, overflow: TextOverflow.ellipsis),
+                Text(
+                  '${_categoryName(item['categorie_id'].toString())} · HT ${formatEuro(ht)} · TVA ${(rate * 100).toStringAsFixed(rate * 100 % 1 == 0 ? 0 : 1)}%',
+                  style: context.text.bodySmall?.copyWith(color: p.textSubtle),
+                ),
+              ],
+            ),
+          ),
+          Text(formatEuro(itemPriceTTC(item)), style: context.text.titleMedium?.copyWith(fontFamily: TiliFonts.display, fontWeight: FontWeight.w700)),
+          const SizedBox(width: TiliSpace.md),
+          TiliIconButton(tooltip: 'Modifier', onPressed: () => _editItem(item), icon: Icons.edit_outlined),
+          TiliIconButton(tooltip: 'Déplacer', onPressed: () => _moveItem(item), icon: Icons.drive_file_move_outline),
+          TiliIconButton(tooltip: 'Supprimer', onPressed: () => _deleteItem(item), icon: Icons.delete_outline, tone: TiliTone.danger),
         ],
       ),
+    );
+  }
+
+  Widget _sortPill(_SortKey key, String label) {
+    final selected = _sortKey == key;
+    return FilterPill(
+      label: label,
       selected: selected,
-      onSelected: (_) => setState(() {
+      trailing: selected
+          ? Icon(_sortAsc ? Icons.arrow_upward : Icons.arrow_downward, size: 14, color: context.palette.onInk)
+          : null,
+      onTap: () => setState(() {
         if (selected) {
           _sortAsc = !_sortAsc;
         } else {
@@ -526,47 +555,48 @@ class _CatalogSectionState extends State<CatalogSection> {
       children: [
         Row(
           children: [
-            Expanded(
-              child: TextField(
-                decoration: const InputDecoration(
-                    prefixIcon: Icon(Icons.search), hintText: 'Rechercher un article…', border: OutlineInputBorder(), isDense: true),
-                onChanged: (v) => setState(() => _itemSearch = v),
-              ),
-            ),
-            const SizedBox(width: 8),
-            DropdownButton<String?>(
+            Expanded(child: SearchField(hint: 'Rechercher un article…', onChanged: (v) => setState(() => _itemSearch = v))),
+            const SizedBox(width: TiliSpace.sm),
+            TiliSelect<String?>(
               value: _itemCategoryFilter,
+              icon: Icons.sell_outlined,
               items: [
-                const DropdownMenuItem(value: null, child: Text('Toutes les catégories')),
-                ..._categories.map((c) =>
-                    DropdownMenuItem(value: c['categorie_id'].toString(), child: Text(c['type'].toString()))),
+                (null, 'Toutes les catégories'),
+                for (final c in _categories) (c['categorie_id'].toString(), c['type'].toString()),
               ],
               onChanged: (v) => setState(() => _itemCategoryFilter = v),
             ),
-            const SizedBox(width: 8),
-            FilledButton.icon(
+            const SizedBox(width: TiliSpace.sm),
+            TiliButton(
+              label: 'Nouvel article',
+              icon: Icons.add,
               onPressed: _categories.isEmpty ? null : () => _createItem(categoryId: _itemCategoryFilter),
-              icon: const Icon(Icons.add),
-              label: const Text('Nouvel article'),
             ),
           ],
         ),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 6,
-          crossAxisAlignment: WrapCrossAlignment.center,
+        const SizedBox(height: TiliSpace.md),
+        Row(
           children: [
-            Text('${rows.length} article${rows.length != 1 ? 's' : ''} · Trier par :'),
-            _sortChip(_SortKey.name, 'Nom'),
-            _sortChip(_SortKey.category, 'Catégorie'),
-            _sortChip(_SortKey.price, 'Prix'),
+            SectionLabel('${rows.length} article${rows.length != 1 ? 's' : ''}'),
+            const Spacer(),
+            Text('Trier par', style: context.text.bodySmall),
+            const SizedBox(width: TiliSpace.sm),
+            _sortPill(_SortKey.name, 'Nom'),
+            const SizedBox(width: TiliSpace.xs + 2),
+            _sortPill(_SortKey.category, 'Catégorie'),
+            const SizedBox(width: TiliSpace.xs + 2),
+            _sortPill(_SortKey.price, 'Prix'),
           ],
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: TiliSpace.md),
         Expanded(
           child: rows.isEmpty
-              ? Center(child: Text(_items.isEmpty ? 'Aucun article.' : 'Aucun résultat.'))
-              : ListView(children: rows.map(_itemTile).toList()),
+              ? EmptyState(
+                  icon: _items.isEmpty ? Icons.inventory_2_outlined : Icons.search_off,
+                  title: _items.isEmpty ? 'Aucun article' : 'Aucun résultat',
+                  tone: TiliTone.neutral,
+                )
+              : _itemList(rows),
         ),
       ],
     );
@@ -578,40 +608,41 @@ class _CatalogSectionState extends State<CatalogSection> {
     if (catalogs == null) return const Center(child: CircularProgressIndicator());
     if (catalogs.isEmpty) {
       return Column(children: [
-        if (_error != null) Text(_error!, style: const TextStyle(color: Colors.red)),
+        if (_error != null) Notice(message: _error!, tone: TiliTone.danger),
         Expanded(child: _emptyCatalogPrompt()),
       ]);
     }
 
+    final description = _currentCatalog?['description']?.toString() ?? '';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _catalogBar(),
-        if ((_currentCatalog?['description']?.toString() ?? '').isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
-            child: Text(_currentCatalog!['description'].toString(), style: TextStyle(color: Colors.grey[700])),
-          ),
-        if (_error != null) Text(_error!, style: const TextStyle(color: Colors.red)),
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            SegmentedButton<int>(
-              segments: [
-                ButtonSegment(value: 0, icon: const Icon(Icons.label), label: Text('Catégories (${_categories.length})')),
-                ButtonSegment(value: 1, icon: const Icon(Icons.inventory_2), label: Text('Tous les articles (${_items.length})')),
-              ],
-              selected: {_tab},
-              onSelectionChanged: (s) => setState(() {
-                _tab = s.first;
-                _drillCategoryId = null;
-              }),
-            ),
-            const Spacer(),
+        PageHeader(
+          title: 'Catalogue',
+          subtitle: description.isNotEmpty ? description : 'Catégories et articles vendus en caisse',
+          actions: [
             if (_loadingContent) const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
           ],
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: TiliSpace.lg),
+        _catalogBar(),
+        if (_error != null) ...[const SizedBox(height: TiliSpace.md), Notice(message: _error!, tone: TiliTone.danger)],
+        const SizedBox(height: TiliSpace.lg),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: SegmentedButton<int>(
+            segments: [
+              ButtonSegment(value: 0, icon: const Icon(Icons.sell_outlined, size: TiliSizes.iconSm), label: Text('Catégories (${_categories.length})')),
+              ButtonSegment(value: 1, icon: const Icon(Icons.inventory_2_outlined, size: TiliSizes.iconSm), label: Text('Tous les articles (${_items.length})')),
+            ],
+            selected: {_tab},
+            onSelectionChanged: (s) => setState(() {
+              _tab = s.first;
+              _drillCategoryId = null;
+            }),
+          ),
+        ),
+        const SizedBox(height: TiliSpace.lg),
         Expanded(child: _tab == 0 ? _categoriesTab() : _itemsTab()),
       ],
     );
@@ -686,71 +717,64 @@ class _ItemFormDialogState extends State<_ItemFormDialog> {
   Widget build(BuildContext context) {
     final validPrice = !_price.isNaN && !_taxPercent.isNaN;
     final ht = validPrice ? round2(_price / (1 + _taxPercent / 100)) : null;
-    return AlertDialog(
-      title: Text(widget.title),
-      content: SizedBox(
-        width: 420,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
+    return TiliDialog(
+      title: widget.title,
+      icon: Icons.inventory_2_outlined,
+      actions: [
+        TiliButton(label: 'Annuler', variant: TiliButtonVariant.outline, onPressed: () => Navigator.of(context).pop()),
+        TiliButton(label: 'Enregistrer', onPressed: _submit),
+      ],
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TiliField(controller: _nameController, label: "Nom de l'article", autofocus: widget.item == null),
+          const SizedBox(height: TiliSpace.lg),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              TextField(
-                controller: _nameController,
-                autofocus: widget.item == null,
-                decoration: const InputDecoration(labelText: "Nom de l'article", border: OutlineInputBorder()),
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _priceController,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      decoration: const InputDecoration(labelText: 'Prix TTC (€)', border: OutlineInputBorder()),
-                      onChanged: (_) => setState(() {}),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  SizedBox(
-                    width: 120,
-                    child: TextField(
-                      controller: _taxController,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      decoration: const InputDecoration(labelText: 'TVA (%)', border: OutlineInputBorder()),
-                      onChanged: (_) => setState(() {}),
-                    ),
-                  ),
-                ],
-              ),
-              if (ht != null) ...[
-                const SizedBox(height: 8),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text('Prix HT : ${formatEuro(ht)} · TVA : ${formatEuro(round2(_price - ht))}',
-                      style: const TextStyle(color: Colors.grey)),
+              Expanded(
+                child: TiliField(
+                  controller: _priceController,
+                  label: 'Prix TTC (€)',
+                  icon: Icons.euro,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  onChanged: (_) => setState(() {}),
                 ),
-              ],
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                initialValue: _categoryId,
-                decoration: const InputDecoration(labelText: 'Catégorie', border: OutlineInputBorder()),
-                items: widget.categories
-                    .map((c) => DropdownMenuItem(value: c['categorie_id'].toString(), child: Text(c['type'].toString())))
-                    .toList(),
-                onChanged: (v) => setState(() => _categoryId = v ?? _categoryId),
               ),
-              if (_error != null) ...[
-                const SizedBox(height: 8),
-                Text(_error!, style: const TextStyle(color: Colors.red)),
-              ],
+              const SizedBox(width: TiliSpace.md),
+              SizedBox(
+                width: 120,
+                child: TiliField(
+                  controller: _taxController,
+                  label: 'TVA (%)',
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  onChanged: (_) => setState(() {}),
+                ),
+              ),
             ],
           ),
-        ),
+          if (ht != null) ...[
+            const SizedBox(height: TiliSpace.sm),
+            Text('Prix HT : ${formatEuro(ht)} · TVA : ${formatEuro(round2(_price - ht))}', style: context.text.bodySmall),
+          ],
+          const SizedBox(height: TiliSpace.lg),
+          const SectionLabel('Catégorie'),
+          const SizedBox(height: TiliSpace.xs + 2),
+          DropdownButtonFormField<String>(
+            initialValue: _categoryId,
+            borderRadius: TiliRadius.all(TiliRadius.md),
+            items: widget.categories
+                .map((c) => DropdownMenuItem(value: c['categorie_id'].toString(), child: Text(c['type'].toString())))
+                .toList(),
+            onChanged: (v) => setState(() => _categoryId = v ?? _categoryId),
+          ),
+          if (_error != null) ...[
+            const SizedBox(height: TiliSpace.md),
+            Notice(message: _error!, tone: TiliTone.danger),
+          ],
+        ],
       ),
-      actions: [
-        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Annuler')),
-        FilledButton(onPressed: _submit, child: const Text('Enregistrer')),
-      ],
     );
   }
 }
@@ -791,31 +815,22 @@ class _CatalogFormDialogState extends State<_CatalogFormDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(widget.title),
-      content: SizedBox(
-        width: 420,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: _nameController,
-              autofocus: true,
-              decoration: const InputDecoration(labelText: 'Nom du catalogue', border: OutlineInputBorder()),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _descriptionController,
-              maxLines: 3,
-              decoration: const InputDecoration(labelText: 'Description (optionnelle)', border: OutlineInputBorder()),
-            ),
-          ],
-        ),
-      ),
+    return TiliDialog(
+      title: widget.title,
+      icon: Icons.folder_outlined,
       actions: [
-        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Annuler')),
-        FilledButton(onPressed: _submit, child: Text(widget.confirmLabel)),
+        TiliButton(label: 'Annuler', variant: TiliButtonVariant.outline, onPressed: () => Navigator.of(context).pop()),
+        TiliButton(label: widget.confirmLabel, onPressed: _submit),
       ],
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TiliField(controller: _nameController, label: 'Nom du catalogue', autofocus: true),
+          const SizedBox(height: TiliSpace.lg),
+          TiliField(controller: _descriptionController, label: 'Description (optionnelle)', maxLines: 3),
+        ],
+      ),
     );
   }
 }
