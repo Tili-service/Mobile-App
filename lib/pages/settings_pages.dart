@@ -1,22 +1,32 @@
 import 'package:flutter/material.dart';
-import '../services/token_service.dart';
-import '../services/auth_service.dart';
-import 'create_catalog_page.dart';
-import 'catalog_edit_page.dart';
-import 'package:jwt_decoder/jwt_decoder.dart';
+import '../services/profile_service.dart';
+import '../theme/theme.dart';
+import '../widgets/widgets.dart';
+import 'settings/catalog_section.dart';
+import 'settings/profiles_section.dart';
 
+/* Store back-office, reached from the POS after an admin PIN check. Every
+call here uses `adminToken` (the ProfileToken of the admin who unlocked the
+page), not the cashier's token, so a low-level cashier session cannot manage
+the store. */
 class SettingsPage extends StatefulWidget {
   const SettingsPage({
     super.key,
     required this.isFullScreen,
     required this.onToggleFullScreen,
     required this.license,
+    required this.storeId,
+    required this.adminToken,
+    required this.adminProfile,
     this.currentCatalogId,
   });
 
   final bool isFullScreen;
   final VoidCallback onToggleFullScreen;
   final Map<String, dynamic> license;
+  final String storeId;
+  final String adminToken;
+  final Map<String, dynamic> adminProfile;
   final String? currentCatalogId;
 
   @override
@@ -25,528 +35,181 @@ class SettingsPage extends StatefulWidget {
 
 class _SettingsPageState extends State<SettingsPage> {
   int _selectedIndex = 0;
-  final List<String> _menuItems = [
-    'Compte',
-    'Analytiques',
-    'Profils',
-    'Catalogues',
-    'TPE',
-    'Informations',
+
+  static const _menu = [
+    SideNavItem('Boutique', Icons.storefront_outlined),
+    SideNavItem('Analytiques', Icons.bar_chart_rounded),
+    SideNavItem('Profils', Icons.people_outline),
+    SideNavItem('Catalogue', Icons.inventory_2_outlined),
+    SideNavItem('TPE', Icons.point_of_sale_outlined),
+    SideNavItem('Informations', Icons.info_outline),
   ];
-  List<dynamic>? _catalogs;
-  bool _isLoadingCatalogs = true;
-  String? _currentCatalogId;
-  List<dynamic>? _sessions;
-  bool _isLoadingSessions = true;
-  String? _currentProfilePin;
-  final Map<int, String> _levelNames = {
-    1: 'Super Administrateur',
-    2: 'Administrateur',
-    3: 'Manager',
-    4: 'Salarié',
-  };
 
-  @override
-  void initState() {
-    super.initState();
-    _currentCatalogId = widget.currentCatalogId;
-    _loadCatalogs();
-    _loadSessions();
+  Widget _infoRow(IconData icon, String label, String value) {
+    final p = context.palette;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: TiliSpace.sm),
+      child: Row(
+        children: [
+          IconTile(icon: icon, size: 36),
+          const SizedBox(width: TiliSpace.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, style: context.text.bodySmall?.copyWith(color: p.textSubtle)),
+                Text(value, style: context.text.titleSmall, overflow: TextOverflow.ellipsis),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
-  Future<void> _loadCatalogs() async {
-    final token = await TokenService.getToken(TokenType.user);
-    final storeId = await TokenService.getToken(TokenType.license);
-    if (token != null && storeId != null) {
-      final catalogs = await AuthService.getCatalog(token, storeId);
-      if (!mounted) return;
-      setState(() {
-        _catalogs = catalogs ?? [];
-        _isLoadingCatalogs = false;
-      });
-    } else {
-      if (!mounted) return;
-      setState(() {
-        _catalogs = [];
-        _isLoadingCatalogs = false;
-      });
-    }
+  Widget _placeholder(String title, String text) {
+    return EmptyState(icon: Icons.construction_outlined, title: title, message: text, tone: TiliTone.neutral);
   }
 
-  Future<void> _loadSessions() async {
-    final token = await TokenService.getToken(TokenType.user);
-    if (token != null) {
-      try {
-        final storeId = await TokenService.getToken(TokenType.license);
-        if (storeId == null) {
-          if (mounted) {
-            setState(() {
-              _isLoadingSessions = false;
-            });
-          }
-          return;
-        }
-        final sessions = await AuthService.getSessions(token, storeId);
-        if (!mounted) return;
-        final profileId = JwtDecoder.decode(token)['profileID']?.toString();
-        final currentSession = sessions
-            ?.cast<Map<String, dynamic>?>()
-            .firstWhere(
-              (session) => session?['profile_id']?.toString() == profileId,
-              orElse: () => null,
+  Widget _shortcut(int index) {
+    final item = _menu[index];
+    return TiliCard(
+      onTap: () => setState(() => _selectedIndex = index),
+      padding: const EdgeInsets.all(TiliSpace.lg),
+      child: Row(
+        children: [
+          IconTile(icon: item.icon, tone: TiliTone.accent),
+          const SizedBox(width: TiliSpace.md),
+          Expanded(child: Text(item.label, style: context.text.titleSmall)),
+          Icon(Icons.chevron_right, color: context.palette.border),
+        ],
+      ),
+    );
+  }
+
+  Widget _storeOverview() {
+    final store = widget.license['store'] ?? {};
+    final level = widget.adminProfile['level_access'] as int?;
+    return ListView(
+      children: [
+        const PageHeader(title: 'Boutique', subtitle: 'Vue d\'ensemble de votre commerce'),
+        const SizedBox(height: TiliSpace.xl),
+        TiliSection(
+          title: 'Informations',
+          icon: Icons.storefront_outlined,
+          children: [
+            _infoRow(Icons.business_outlined, 'Nom du commerce', store['name']?.toString() ?? 'N/A'),
+            _infoRow(Icons.confirmation_number_outlined, 'Licence', widget.license['licence_id']?.toString() ?? 'N/A'),
+            _infoRow(Icons.admin_panel_settings_outlined, 'Connecté en tant que',
+                '${widget.adminProfile['name'] ?? 'Admin'} (${ProfileService.levelNames[level] ?? 'Inconnu'})'),
+          ],
+        ),
+        const SizedBox(height: TiliSpace.xl),
+        const SectionLabel('Accès rapide'),
+        const SizedBox(height: TiliSpace.md),
+        LayoutBuilder(
+          builder: (context, c) {
+            const gap = TiliSpace.md;
+            final cols = (c.maxWidth / 260).floor().clamp(1, 3);
+            final w = (c.maxWidth - gap * (cols - 1)) / cols;
+            return Wrap(
+              spacing: gap,
+              runSpacing: gap,
+              children: [for (var i = 1; i < _menu.length; i++) SizedBox(width: w, child: _shortcut(i))],
             );
-        setState(() {
-          _sessions = sessions;
-          _currentProfilePin = currentSession?['pin']?.toString();
-          _isLoadingSessions = false;
-        });
-      } catch (e) {
-        print('Error loading sessions: $e');
-        if (mounted) {
-          setState(() {
-            _isLoadingSessions = false;
-          });
-        }
-      }
-    } else {
-      if (mounted) {
-        setState(() {
-          _isLoadingSessions = false;
-        });
-      }
-    }
+          },
+        ),
+        const SizedBox(height: TiliSpace.xl),
+        const TiliSection(
+          title: "Filtres d'accessibilité",
+          icon: Icons.accessibility_new_outlined,
+          children: [Notice(message: "Options d'accessibilité à venir…", tone: TiliTone.info)],
+        ),
+      ],
+    );
   }
 
   Widget _buildContent() {
-    switch (_selectedIndex) {
-      case 0:
-        return SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Informations du compte',
-                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 20),
-              Card(
-                elevation: 4,
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          const Icon(Icons.business, size: 24),
-                          const SizedBox(width: 8),
-                          Text(
-                            'Nom du commerce: ${widget.license['store']['name'] ?? 'N/A'}',
-                            style: const TextStyle(fontSize: 18),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          const Icon(Icons.confirmation_number, size: 24),
-                          const SizedBox(width: 8),
-                          Text(
-                            'ID licence: ${widget.license['licence_id'] ?? widget.license['id'] ?? 'N/A'}',
-                            style: const TextStyle(fontSize: 18),
-                          ),
-                        ],
-                      ),
-                      if (_currentProfilePin != null) ...[
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            const Icon(Icons.pin, size: 24),
-                            const SizedBox(width: 8),
-                            Text(
-                              'PIN: $_currentProfilePin',
-                              style: const TextStyle(fontSize: 18),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 24),
-              const Text(
-                'Accès aux sections',
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 16),
-              GridView.count(
-                crossAxisCount: 3,
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                crossAxisSpacing: 8,
-                mainAxisSpacing: 8,
-                children: List.generate(_menuItems.length, (index) {
-                  return ElevatedButton(
-                    onPressed: () {
-                      setState(() {
-                        _selectedIndex = index;
-                      });
-                    },
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.all(16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: Text(
-                      _menuItems[index],
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(fontSize: 16),
-                    ),
-                  );
-                }),
-              ),
-              const SizedBox(height: 24),
-              const Text(
-                'Filtres d\'accessibilité',
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 16),
-              Card(
-                elevation: 4,
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Options d\'accessibilité à venir...',
-                        style: TextStyle(fontSize: 16),
-                      ),
-                      // Add actual toggles here if needed
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        );
-      case 1:
-        return const Text('Contenu pour Analytiques');
-      case 2:
-        return Column(
-          children: [
-            const SizedBox(height: 16),
-            Expanded(
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                child: _isLoadingSessions
-                    ? const Center(child: CircularProgressIndicator())
-                    : _sessions != null
-                    ? GridView.builder(
-                        gridDelegate:
-                            const SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: 4,
-                              crossAxisSpacing: 8,
-                              mainAxisSpacing: 8,
-                            ),
-                        itemCount: _sessions!.length + 1,
-                        itemBuilder: (context, index) {
-                          if (index == 0) {
-                            return GestureDetector(
-                              onTap: () {
-                                final nameController = TextEditingController();
-                                const Map<String, int> levels = {
-                                  'Salarié': 4,
-                                  'Manager': 3,
-                                  'Admin': 2,
-                                };
-                                String selectedLevel = 'Salarié';
-                                showDialog(
-                                  context: context,
-                                  builder: (context) => StatefulBuilder(
-                                    builder: (context, setState) => AlertDialog(
-                                      title: const Text('Créer un profil'),
-                                      content: Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          TextField(
-                                            controller: nameController,
-                                            decoration: const InputDecoration(
-                                              labelText: 'Nom du profil',
-                                            ),
-                                          ),
-                                          const SizedBox(height: 16),
-                                          const Text('Niveau d\'accès:'),
-                                          Row(
-                                            mainAxisAlignment:
-                                                MainAxisAlignment.spaceEvenly,
-                                            children: levels.keys
-                                                .map(
-                                                  (level) => Expanded(
-                                                    child:
-                                                        RadioListTile<String>(
-                                                          title: Text(level),
-                                                          value: level,
-                                                          groupValue:
-                                                              selectedLevel,
-                                                          onChanged: (value) {
-                                                            setState(() {
-                                                              selectedLevel =
-                                                                  value!;
-                                                            });
-                                                          },
-                                                        ),
-                                                  ),
-                                                )
-                                                .toList(),
-                                          ),
-                                        ],
-                                      ),
-                                      actions: [
-                                        TextButton(
-                                          onPressed: () =>
-                                              Navigator.of(context).pop(),
-                                          child: const Text('Annuler'),
-                                        ),
-                                        TextButton(
-                                          onPressed: () async {
-                                            final token =
-                                                await TokenService.getToken(
-                                                  TokenType.user,
-                                                );
-                                            if (token != null) {
-                                              await AuthService.createSession(
-                                                token,
-                                                nameController.text,
-                                                levels[selectedLevel]!,
-                                              );
-                                              _loadSessions();
-                                            }
-                                            Navigator.of(context).pop();
-                                          },
-                                          child: const Text('Créer'),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                );
-                              },
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  border: Border.all(color: Colors.grey),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: const Center(
-                                  child: Icon(Icons.add, size: 48),
-                                ),
-                              ),
-                            );
-                          } else {
-                            final session = _sessions![index - 1];
-                            return GestureDetector(
-                              onTap: () {
-                                showDialog(
-                                  context: context,
-                                  builder: (context) => AlertDialog(
-                                    insetPadding: const EdgeInsets.symmetric(
-                                      horizontal: 40,
-                                      vertical: 80,
-                                    ),
-                                    title: Text(
-                                      session['name'] ?? 'Profil',
-                                      style: const TextStyle(
-                                        fontSize: 24,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                    content: Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        ListTile(
-                                          leading: const Icon(
-                                            Icons.security,
-                                            size: 32,
-                                          ),
-                                          title: const Text(
-                                            'Niveau d\'accès',
-                                            style: TextStyle(fontSize: 20),
-                                          ),
-                                          subtitle: Text(
-                                            _levelNames[session['level_access']] ??
-                                                'Inconnu',
-                                            style: TextStyle(fontSize: 18),
-                                          ),
-                                        ),
-                                        ListTile(
-                                          leading: const Icon(Icons.pin),
-                                          title: const Text('PIN'),
-                                          subtitle: Text(
-                                            session['pin'] ?? 'N/A',
-                                          ),
-                                        ),
-                                        ListTile(
-                                          leading: const Icon(
-                                            Icons.check_circle,
-                                          ),
-                                          title: const Text('Actif'),
-                                          subtitle: Text(
-                                            session['is_active']
-                                                ? 'Oui'
-                                                : 'Non',
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    actions: [
-                                      TextButton(
-                                        onPressed: () =>
-                                            Navigator.of(context).pop(),
-                                        child: const Text(
-                                          'Fermer',
-                                          style: TextStyle(fontSize: 18),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                );
-                              },
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  border: Border.all(color: Colors.grey),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Center(
-                                  child: Text(session['name'] ?? 'Profil'),
-                                ),
-                              ),
-                            );
-                          }
-                        },
-                      )
-                    : const Center(child: Text('Aucune session')),
-              ),
-            ),
-          ],
-        );
-      case 3:
-        return Column(
-          children: [
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () {
-                  showDialog(
-                    context: context,
-                    builder: (context) => const CreateCatalogDialog(),
-                  ).then((result) {
-                    if (result == true) {
-                      _loadCatalogs();
-                    }
-                  });
-                },
-                child: const Text('Créer un catalogue'),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Expanded(
-              child: Container(
-                decoration: BoxDecoration(
-                  border: Border.all(color: Colors.grey),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                padding: const EdgeInsets.all(16),
-                child: _isLoadingCatalogs
-                    ? const Center(child: CircularProgressIndicator())
-                    : _catalogs != null && _catalogs!.isNotEmpty
-                    ? ListView.builder(
-                        itemCount: _catalogs!.length,
-                        itemBuilder: (context, index) {
-                          final catalog = _catalogs![index];
-                          return Container(
-                            margin: const EdgeInsets.symmetric(vertical: 4),
-                            decoration: BoxDecoration(
-                              border: Border.all(
-                                color:
-                                    catalog['catalog_id']?.toString() ==
-                                        _currentCatalogId
-                                    ? Colors.orange
-                                    : Colors.grey,
-                              ),
-                              borderRadius: BorderRadius.circular(8),
-                              color:
-                                  catalog['catalog_id']?.toString() ==
-                                      _currentCatalogId
-                                  ? Colors.orange.withOpacity(0.1)
-                                  : null,
-                            ),
-                            child: SizedBox(
-                              height: 100,
-                              child: ListTile(
-                                title: Text(
-                                  catalog['name'] ?? 'Catalogue ${index + 1}',
-                                ),
-                                onTap: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) =>
-                                          CatalogEditPage(catalog: catalog),
-                                    ),
-                                  ).then((result) {
-                                    if (result == true) {
-                                      _loadCatalogs();
-                                    }
-                                  });
-                                },
-                              ),
-                            ),
-                          );
-                        },
-                      )
-                    : const Center(child: Text('Aucun catalogue')),
-              ),
-            ),
-          ],
-        );
-      case 4:
-        return const Text('Contenu pour TPE');
-      case 5:
-        return const Text('Contenu pour Informations');
-      default:
-        return const Text('Sélectionnez une option');
-    }
+    return switch (_selectedIndex) {
+      0 => _storeOverview(),
+      1 => _placeholder('Analytiques', 'Les statistiques de ventes arrivent bientôt.'),
+      2 => ProfilesSection(
+          token: widget.adminToken,
+          storeId: widget.storeId,
+          currentProfileId: widget.adminProfile['profile_id']?.toString(),
+        ),
+      3 => CatalogSection(
+          token: widget.adminToken,
+          storeId: widget.storeId,
+          initialCatalogId: widget.currentCatalogId,
+        ),
+      4 => _placeholder('Configuration TPE', 'La connexion aux terminaux de paiement arrive bientôt.'),
+      _ => _placeholder('Informations', 'Bientôt disponible.'),
+    };
   }
 
   @override
   Widget build(BuildContext context) {
+    final p = context.palette;
+    final adminName = widget.adminProfile['name']?.toString() ?? 'Admin';
     return Scaffold(
-      appBar: AppBar(title: const Text('Paramètres')),
       body: Row(
         children: [
-          SizedBox(
-            width: 200,
-            child: ListView.builder(
-              itemCount: _menuItems.length,
-              itemBuilder: (context, index) {
-                return ListTile(
-                  title: Text(_menuItems[index]),
-                  selected: index == _selectedIndex,
-                  onTap: () {
-                    setState(() {
-                      _selectedIndex = index;
-                    });
-                  },
-                );
-              },
+          SideNav(
+            items: _menu,
+            selected: _selectedIndex,
+            onSelect: (i) => setState(() => _selectedIndex = i),
+            footer: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Avatar(name: adminName, size: 34),
+                    const SizedBox(width: TiliSpace.sm + 2),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(adminName, overflow: TextOverflow.ellipsis, style: context.text.labelLarge?.copyWith(color: p.onInk)),
+                          Text(
+                            ProfileService.levelNames[widget.adminProfile['level_access']] ?? '',
+                            style: context.text.bodySmall?.copyWith(color: p.onInkMuted),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: TiliSpace.md),
+                TiliButton(
+                  label: 'Retour à la caisse',
+                  icon: Icons.arrow_back,
+                  variant: TiliButtonVariant.accent,
+                  size: TiliButtonSize.sm,
+                  expand: true,
+                  onPressed: () => Navigator.of(context).maybePop(),
+                ),
+              ],
             ),
           ),
-          const VerticalDivider(width: 1),
           Expanded(
-            child: Container(
-              padding: const EdgeInsets.all(16),
-              child: _buildContent(),
+            child: Column(
+              children: [
+                TiliAppBar(
+                  showBack: false,
+                  breadcrumb: 'Paramètres',
+                  title: widget.license['store']?['name']?.toString() ?? '',
+                  actions: [
+                    FullscreenButton(isFullScreen: widget.isFullScreen, onToggle: widget.onToggleFullScreen),
+                  ],
+                ),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.all(TiliSpace.page),
+                    child: _buildContent(),
+                  ),
+                ),
+              ],
             ),
           ),
         ],

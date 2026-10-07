@@ -1,17 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import '../services/token_service.dart';
-import '../services/auth_service.dart';
+import '../services/profile_service.dart';
+import '../theme/theme.dart';
+import '../widgets/widgets.dart';
 import 'main_page.dart';
 
-/* The SessionPage is a stateful widget that represents the session screen of the application.
-It displays the name of the store associated with the selected license and prompts the user
-to enter a 6-digit PIN to continue. The page includes an input field for the PIN and a button
-to submit the PIN. When the user taps the "Continuer" button, it checks if the entered PIN
-is valid by calling the AuthService's getPin method. If the PIN is correct, it
-navigates to the MainPage. If the PIN is incorrect, it shows a SnackBar with an error message
-and clears the input field. The page also includes a floating action button to toggle
-full-screen mode. */
+/* PIN entry for the selected shop: opens the POS as the matching profile. */
 class SessionPage extends StatefulWidget {
   const SessionPage({
     super.key,
@@ -28,18 +22,10 @@ class SessionPage extends StatefulWidget {
   State<SessionPage> createState() => _SessionPageState();
 }
 
-
-
-/* The _SessionPageState class manages the state of the SessionPage widget. It includes
-a TextEditingController for the PIN input field. The _checkPin method is responsible for
-validating the entered PIN by calling the AuthService's getPin method with the authentication
-token, the entered PIN, and the store ID. If the PIN is correct, it navigates to the MainPage.
-If the PIN is incorrect, it shows a SnackBar with an error message and clears the input field.
-The build method constructs the UI of the page, including the display of the store name, the
-PIN input field, and the continue button. The floating action button allows the user to toggle
-full-screen mode. */
 class _SessionPageState extends State<SessionPage> {
   final pinController = TextEditingController();
+  String? _error;
+  bool _loading = false;
 
   @override
   void dispose() {
@@ -47,100 +33,82 @@ class _SessionPageState extends State<SessionPage> {
     super.dispose();
   }
 
-  /* The _checkPin method is responsible for validating the entered PIN. It first checks if the
-  length of the entered PIN is 6 digits. If it is, it retrieves the authentication token and
-  store ID from the TokenService. If both the token and store ID are available, it calls the
-  AuthService's getPin method with the token, entered PIN, and store ID. If the result is not null
-  (indicating a successful PIN validation), it navigates to the MainPage. If the result is
-  null (indicating an incorrect PIN), it shows a SnackBar with an error message and clears the
-  input field. If the entered PIN does not have 6 digits, it shows a SnackBar with a message
-  indicating that the PIN must contain 6 digits. */
+  /* Checks the 6-digit PIN against the backend for the selected store, saves
+  the returned ProfileToken and opens the POS; clears the field on failure. */
   void _checkPin() async {
-    if (pinController.text.length == 6) {
-      final token = await TokenService.getToken(TokenType.shop);
-      final storeId = await TokenService.getToken(TokenType.license);
-      if (token != null && storeId != null) {
-        final result = await AuthService.getPin(token, pinController.text, storeId);
-        if (result != null) {
-          // Save the user token
-          if (result['token'] != null) {
-            await TokenService.saveToken(TokenType.user, result['token']);
-          }
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(
-              builder: (_) => MainPage(
-                isFullScreen: widget.isFullScreen,
-                onToggleFullScreen: widget.onToggleFullScreen,
-                license: widget.license,
-              ),
-            ),
-          );
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('PIN incorrect')),
-          );
-          pinController.clear();
-        }
-      }
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Le PIN doit contenir 6 chiffres')),
-      );
+    if (_loading) return;
+    if (pinController.text.length != 6) {
+      setState(() => _error = 'Le PIN doit contenir 6 chiffres');
+      return;
     }
+    final storeId = await TokenService.getToken(TokenType.license);
+    if (storeId == null) return;
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    final Map<String, dynamic> result;
+    try {
+      result = await ProfileService.loginWithPin(storeId, pinController.text);
+    } catch (_) {
+      if (mounted) setState(() => _error = 'PIN incorrect');
+      pinController.clear();
+      return;
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+    await TokenService.saveToken(TokenType.user, result['token'].toString());
+    if (!mounted) return;
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(
+        builder: (_) => MainPage(
+          isFullScreen: widget.isFullScreen,
+          onToggleFullScreen: widget.onToggleFullScreen,
+          license: widget.license,
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    final p = context.palette;
     return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.license['store']?['name'] ?? 'Session'),
-      ),
+      appBar: TiliAppBar(breadcrumb: 'Mes commerces', title: widget.license['store']?['name'] ?? 'Session'),
+      floatingActionButton: FullscreenButton(isFullScreen: widget.isFullScreen, onToggle: widget.onToggleFullScreen),
       body: Center(
         child: SingleChildScrollView(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Image.asset(
-                'assets/tiliLogo.png',
-                height: 250,
-              ),
-              const SizedBox(height: 25),
-              SizedBox(
-                width: 200,
-                child: TextField(
-                  controller: pinController,
-                  keyboardType: TextInputType.number,
-                  textAlign: TextAlign.center,
-                  maxLength: 6,
-                  obscureText: true,
-                  inputFormatters: [
-                    FilteringTextInputFormatter.digitsOnly,
-                  ],
-                  decoration: const InputDecoration(
-                    hintText: 'Entrez le PIN (6 chiffres)',
-                    border: OutlineInputBorder(),
+          padding: const EdgeInsets.all(TiliSpace.xl),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 420),
+            child: TiliCard(
+              shadow: true,
+              padding: const EdgeInsets.all(TiliSpace.xxl),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Center(child: IconTile(icon: Icons.lock_outline, size: 64, circle: true)),
+                  const SizedBox(height: TiliSpace.xl),
+                  Text('Accès caisse', textAlign: TextAlign.center, style: context.text.headlineSmall),
+                  const SizedBox(height: TiliSpace.sm),
+                  Text(
+                    'Entrez votre code PIN à 6 chiffres pour ouvrir votre session.',
+                    textAlign: TextAlign.center,
+                    style: context.text.bodyMedium?.copyWith(color: p.textMuted),
                   ),
-                ),
+                  const SizedBox(height: TiliSpace.xxl),
+                  PinField(controller: pinController, onSubmitted: (_) => _checkPin()),
+                  if (_error != null) ...[
+                    const SizedBox(height: TiliSpace.lg),
+                    Notice(message: _error!, tone: TiliTone.danger),
+                  ],
+                  const SizedBox(height: TiliSpace.xl),
+                  TiliButton(label: 'Continuer', size: TiliButtonSize.lg, expand: true, loading: _loading, onPressed: _checkPin),
+                ],
               ),
-              const SizedBox(height: 20),
-              SizedBox(
-                width: 200,
-                height: 45,
-                child: ElevatedButton(
-                  onPressed: _checkPin,
-                  child: const Text('Continuer'),
-                ),
-              ),
-            ],
+            ),
           ),
-        ),
-      ),
-      floatingActionButton: IconButton(
-        onPressed: widget.onToggleFullScreen,
-        icon: Icon(
-          widget.isFullScreen
-              ? Icons.fullscreen_exit
-              : Icons.fullscreen,
         ),
       ),
     );
