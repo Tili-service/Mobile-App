@@ -12,7 +12,8 @@ import 'settings_pages.dart';
 
 /* POS screen of the logged-in cashier: products of the active catalogue
 (filterable by category), cart with quantity keypad, payment buttons, and
-the admin PIN gate to the settings. */
+the admin PIN gate to the settings. Several orders can be open at once and
+are switched from the bottom bar; paying an order closes it. */
 class MainPage extends StatefulWidget {
   const MainPage({
     super.key,
@@ -38,9 +39,16 @@ class _MainPageState extends State<MainPage> {
   bool _isLoadingCatalog = true;
   List<dynamic>? _categories;
   List<dynamic> _items = [];
-  final List<Map<String, dynamic>> _cartItems = [];
-  dynamic _selectedProduct;
-  String _quantityInput = '';
+  final List<_Order> _orders = [_Order(1)];
+  int _activeOrderIndex = 0;
+  int _nextOrderNumber = 2;
+
+  _Order get _order => _orders[_activeOrderIndex];
+  List<Map<String, dynamic>> get _cartItems => _order.cartItems;
+  dynamic get _selectedProduct => _order.selectedProduct;
+  set _selectedProduct(dynamic product) => _order.selectedProduct = product;
+  String get _quantityInput => _order.quantityInput;
+  set _quantityInput(String input) => _order.quantityInput = input;
 
   @override
   void initState() {
@@ -121,10 +129,49 @@ class _MainPageState extends State<MainPage> {
       ?.toString();
 
 
-  double get _cartTotal {
-    return _cartItems.fold(0, (total, item) {
+  double _orderTotal(_Order order) {
+    return order.cartItems.fold(0, (total, item) {
       return total + (_itemPrice(item['product']) * (item['quantity'] as int));
     });
+  }
+
+  double get _cartTotal => _orderTotal(_order);
+
+  void _newOrder() {
+    setState(() {
+      _orders.add(_Order(_nextOrderNumber++));
+      _activeOrderIndex = _orders.length - 1;
+    });
+  }
+
+  void _selectOrder(int index) {
+    setState(() => _activeOrderIndex = index);
+  }
+
+  /* Removes an order from the bar; there is always at least one open order,
+  so closing the last one replaces it with a fresh one. */
+  void _closeOrder(int index) {
+    setState(() {
+      _orders.removeAt(index);
+      if (_orders.isEmpty) {
+        _orders.add(_Order(_nextOrderNumber++));
+      }
+      if (_activeOrderIndex >= index && _activeOrderIndex > 0) {
+        _activeOrderIndex--;
+      }
+    });
+  }
+
+  // TODO: record the payment on the backend once the sales API exists.
+  void _pay(String method) {
+    if (_cartItems.isEmpty) {
+      _showSnackBar('Le panier est vide');
+      return;
+    }
+    final number = _order.number;
+    final total = _cartTotal;
+    _closeOrder(_activeOrderIndex);
+    _showSnackBar('Commande $number réglée ($method) : ${formatEuro(total)}', error: false);
   }
 
   void _addToCart(dynamic product, {int quantity = 1}) {
@@ -573,20 +620,62 @@ class _MainPageState extends State<MainPage> {
           ),
         ),
         const SizedBox(height: TiliSpace.md),
-        TiliButton(label: 'Carte', icon: Icons.credit_card, size: TiliButtonSize.lg, expand: true, onPressed: () {}),
+        TiliButton(label: 'Carte', icon: Icons.credit_card, size: TiliButtonSize.lg, expand: true, onPressed: () => _pay('Carte')),
         const SizedBox(height: TiliSpace.sm),
         Row(
           children: [
             Expanded(
-              child: TiliButton(label: 'Espèces', icon: Icons.payments_outlined, variant: TiliButtonVariant.outline, size: TiliButtonSize.lg, onPressed: () {}),
+              child: TiliButton(label: 'Espèces', icon: Icons.payments_outlined, variant: TiliButtonVariant.outline, size: TiliButtonSize.lg, onPressed: () => _pay('Espèces')),
             ),
             const SizedBox(width: TiliSpace.sm),
             Expanded(
-              child: TiliButton(label: 'Multiple', icon: Icons.call_split, variant: TiliButtonVariant.outline, size: TiliButtonSize.lg, onPressed: () {}),
+              child: TiliButton(label: 'Multiple', icon: Icons.call_split, variant: TiliButtonVariant.outline, size: TiliButtonSize.lg, onPressed: () => _pay('Multiple')),
             ),
           ],
         ),
       ],
+    );
+  }
+
+  Widget _orderTab(int index) {
+    final p = context.palette;
+    final order = _orders[index];
+    final selected = index == _activeOrderIndex;
+    final mutedColor = selected ? p.onInkMuted : p.textSubtle;
+    return FilterPill(
+      label: 'Commande ${order.number}',
+      icon: Icons.receipt_long_outlined,
+      selected: selected,
+      onTap: () => _selectOrder(index),
+      trailing: order.cartItems.isNotEmpty
+          ? Text(formatEuro(_orderTotal(order)), style: context.text.labelLarge?.copyWith(color: selected ? p.accentSoft : p.accentStrong))
+          : _orders.length > 1
+              ? InkWell(
+                  onTap: () => _closeOrder(index),
+                  borderRadius: TiliRadius.all(TiliRadius.pill),
+                  child: Tooltip(message: 'Fermer la commande', child: Icon(Icons.close, size: TiliSizes.iconSm, color: mutedColor)),
+                )
+              : null,
+    );
+  }
+
+  Widget _orderBar() {
+    return SizedBox(
+      height: TiliSizes.buttonMd,
+      child: Row(
+        children: [
+          Expanded(
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: _orders.length,
+              separatorBuilder: (_, _) => const SizedBox(width: TiliSpace.sm),
+              itemBuilder: (context, index) => _orderTab(index),
+            ),
+          ),
+          const SizedBox(width: TiliSpace.sm),
+          TiliButton(label: 'Nouvelle commande', icon: Icons.add, variant: TiliButtonVariant.soft, onPressed: _newOrder),
+        ],
+      ),
     );
   }
 
@@ -597,20 +686,40 @@ class _MainPageState extends State<MainPage> {
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(TiliSpace.lg),
-          child: Row(
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Expanded(flex: 5, child: _catalogPanel()),
-              const SizedBox(width: TiliSpace.lg),
-              Expanded(flex: 3, child: _cartPanel()),
-              const SizedBox(width: TiliSpace.lg),
-              Expanded(flex: 3, child: _actionPanel()),
+              Expanded(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(flex: 5, child: _catalogPanel()),
+                    const SizedBox(width: TiliSpace.lg),
+                    Expanded(flex: 3, child: _cartPanel()),
+                    const SizedBox(width: TiliSpace.lg),
+                    Expanded(flex: 3, child: _actionPanel()),
+                  ],
+                ),
+              ),
+              const SizedBox(height: TiliSpace.md),
+              _orderBar(),
             ],
           ),
         ),
       ),
     );
   }
+}
+
+/* One open order of the till: its cart and the keypad state tied to it, so
+switching orders restores exactly what the cashier was typing. */
+class _Order {
+  _Order(this.number);
+
+  final int number;
+  final List<Map<String, dynamic>> cartItems = [];
+  dynamic selectedProduct;
+  String quantityInput = '';
 }
 
 class _SettingsPinDialog extends StatefulWidget {
