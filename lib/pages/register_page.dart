@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/account_service.dart';
-import '../widgets/dialogs.dart';
+import '../theme/theme.dart';
+import '../widgets/widgets.dart';
 
 /* Account creation. On success, pops back to the credentials page with the
 email so the merchant only has to type the password again. */
@@ -18,7 +19,6 @@ class _RegisterPageState extends State<RegisterPage> {
   final _passwordController = TextEditingController();
   final _confirmController = TextEditingController();
   bool _acceptedTerms = false;
-  bool _hidePassword = true;
   bool _loading = false;
 
   @override
@@ -56,73 +56,89 @@ class _RegisterPageState extends State<RegisterPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('CRÉER UN COMPTE')),
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: SizedBox(
-            width: 420,
-            child: Form(
-              key: _formKey,
-              child: Column(
-                children: [
-                  TextFormField(
-                    controller: _nameController,
-                    decoration: const InputDecoration(labelText: 'Nom complet', border: OutlineInputBorder()),
-                    validator: (v) => (v == null || v.trim().isEmpty) ? 'Le nom est requis' : null,
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: _emailController,
-                    keyboardType: TextInputType.emailAddress,
-                    decoration: const InputDecoration(labelText: 'Email', border: OutlineInputBorder()),
-                    validator: (v) => (v == null || !v.contains('@')) ? 'Email invalide' : null,
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
+    final p = context.palette;
+    return AuthLayout(
+      title: 'Créer un compte',
+      subtitle: 'Quelques secondes suffisent pour démarrer avec Tili.',
+      onBack: () => Navigator.of(context).maybePop(),
+      footer: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text('Déjà un compte ?', style: context.text.bodyMedium?.copyWith(color: p.textMuted)),
+          TextButton(onPressed: () => Navigator.of(context).maybePop(), child: const Text('Se connecter')),
+        ],
+      ),
+      child: Form(
+        key: _formKey,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            TiliField(
+              controller: _nameController,
+              label: 'Nom complet',
+              hint: 'Jean Dupont',
+              icon: Icons.person_outline,
+              large: true,
+              validator: (v) => (v == null || v.trim().isEmpty) ? 'Le nom est requis' : null,
+            ),
+            const SizedBox(height: TiliSpace.lg),
+            TiliField(
+              controller: _emailController,
+              label: 'Email',
+              hint: 'vous@exemple.com',
+              icon: Icons.mail_outline,
+              large: true,
+              keyboardType: TextInputType.emailAddress,
+              validator: (v) => (v == null || !v.contains('@')) ? 'Email invalide' : null,
+            ),
+            const SizedBox(height: TiliSpace.lg),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: TiliField(
                     controller: _passwordController,
-                    obscureText: _hidePassword,
-                    decoration: InputDecoration(
-                      labelText: 'Mot de passe',
-                      border: const OutlineInputBorder(),
-                      suffixIcon: IconButton(
-                        onPressed: () => setState(() => _hidePassword = !_hidePassword),
-                        icon: Icon(_hidePassword ? Icons.visibility : Icons.visibility_off),
-                      ),
-                    ),
+                    label: 'Mot de passe',
+                    hint: '••••••••',
+                    icon: Icons.lock_outline,
+                    large: true,
+                    password: true,
                     validator: (v) => (v == null || v.length < 6) ? '6 caractères minimum' : null,
                   ),
-                  const SizedBox(height: 12),
-                  TextFormField(
+                ),
+                const SizedBox(width: TiliSpace.md),
+                Expanded(
+                  child: TiliField(
                     controller: _confirmController,
-                    obscureText: _hidePassword,
-                    decoration: const InputDecoration(labelText: 'Confirmer le mot de passe', border: OutlineInputBorder()),
-                    validator: (v) => v != _passwordController.text ? 'Les mots de passe ne correspondent pas' : null,
+                    label: 'Confirmation',
+                    hint: '••••••••',
+                    icon: Icons.lock_outline,
+                    large: true,
+                    password: true,
+                    validator: (v) => v != _passwordController.text ? 'Ne correspond pas' : null,
                   ),
-                  const SizedBox(height: 8),
-                  CheckboxListTile(
-                    value: _acceptedTerms,
-                    onChanged: (v) => setState(() => _acceptedTerms = v ?? false),
-                    controlAffinity: ListTileControlAffinity.leading,
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text("J'accepte les conditions d'utilisation"),
-                  ),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 45,
-                    child: FilledButton(
-                      onPressed: _loading ? null : _submit,
-                      child: _loading
-                          ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                          : const Text('CRÉER MON COMPTE'),
-                    ),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
-          ),
+            const SizedBox(height: TiliSpace.md),
+            CheckboxListTile(
+              value: _acceptedTerms,
+              onChanged: (v) => setState(() => _acceptedTerms = v ?? false),
+              controlAffinity: ListTileControlAffinity.leading,
+              contentPadding: EdgeInsets.zero,
+              dense: true,
+              title: Text("J'accepte les conditions d'utilisation", style: context.text.bodyMedium?.copyWith(color: p.textMuted)),
+            ),
+            const SizedBox(height: TiliSpace.lg),
+            TiliButton(
+              label: 'Créer mon compte',
+              trailingIcon: Icons.arrow_forward,
+              size: TiliButtonSize.lg,
+              expand: true,
+              loading: _loading,
+              onPressed: _submit,
+            ),
+          ],
         ),
       ),
     );
